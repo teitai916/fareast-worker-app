@@ -1,0 +1,140 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
+  tomcat:
+    max-swallow-size: 50MB
+
+spring:
+  application:
+    name: fareast-worker-app
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/fareast_worker?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Hong_Kong
+    username: postgres
+    password: dW@20251101
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      connection-timeout: 20000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+  redis:
+    host: localhost
+    port: 6379
+    password:
+    timeout: 5000
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    timezone: Asia/Hong_Kong
+    default-property-inclusion: non_null
+
+  mvc:
+    static-path-pattern: /uploads/**
+
+  web:
+    resources:
+      static-locations: file:./uploads/
+
+  # 文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 50MB
+      enabled: true
+
+# 自定义配置
+file:
+  upload-dir: ./uploads
+
+# JWT Configuration
+jwt:
+  secret: YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY3ODkwYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0
+  expiration: 86400000  # 24 hours
+  refresh-expiration: 2592000000  # 30 days
+
+# SMS Configuration
+sms:
+  provider: aliyun
+  access-key-id: your-aliyun-access-key
+  access-key-secret: your-aliyun-secret
+  sign-name: 远东工友
+  template-code: SMS_XXXXXX
+
+# Face Recognition Configuration
+face:
+  provider: baidu
+  app-id: your-baidu-app-id
+  api-key: your-baidu-api-key
+  secret-key: your-baidu-secret-key
+  verification-threshold: 65   # 人脸验证通过阈值（0-100）
+
+# Feishu/Lark Configuration
+feishu:
+  app-id: your-feishu-app-id
+  app-secret: your-feishu-app-secret
+
+# Check-in geo-fencing
+checkin:
+  max-distance: 300        # 打卡最大允许距离（米）
+
+# Logging
+logging:
+  level:
+    com.fareast.worker: DEBUG
+    org.springframework.security: INFO
+    org.hibernate: WARN
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  flyway:
+    enabled: false
+
+logging:
+  level:
+    com.fareast.worker: DEBUG
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+logging:
+  level:
+    com.fareast.worker: WARN
