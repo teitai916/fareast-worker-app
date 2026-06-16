@@ -48,6 +48,7 @@ public class SecurityConfig {
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/safety/videos").permitAll()
                         .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers("/uploads/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .userDetailsService(customUserDetailsService)
@@ -62,7 +63,10 @@ public class SecurityConfig {
         // 允许所有 localhost 端口（开发环境）
         configuration.setAllowedOriginPatterns(Arrays.asList(
                 "http://localhost:*",
-                "http://127.0.0.1:*"
+                    "http://127.0.0.1:*",
+                    "http://10.106.0.*:*",
+                    "http://192.168.*.*:*",
+                    "http://172.*.*.*:*"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));

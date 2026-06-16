@@ -71,7 +71,7 @@ file:
 # JWT Configuration
 jwt:
   secret: YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY3ODkwYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0
-  expiration: 86400000  # 24 hours
+  expiration: 7776000000  # ← 从 24h 改为 90天 (90×24×60×60×1000)
   refresh-expiration: 2592000000  # 30 days
 
 # SMS Configuration
