@@ -6,6 +6,7 @@ import 'package:fareast_worker_app/pages/worker/face_register_page.dart';
 import 'package:fareast_worker_app/pages/worker/worker_home_page.dart';
 import 'package:fareast_worker_app/pages/contractor/contractor_home_page.dart';
 import 'package:fareast_worker_app/pages/admin/admin_home_page.dart';
+import 'package:fareast_worker_app/pages/internal/internal_home_page.dart';
 
 /// 启动页：检查登录状态，决定跳转目标
 class SplashPage extends StatefulWidget {
@@ -52,6 +53,8 @@ class _SplashPageState extends State<SplashPage> {
         }
       } else if (role == 'CONTRACTOR') {
         _go(const ContractorHomePage());
+      } else if (role == 'SITE_MANAGER' || role == 'PROJECT_MANAGER' || role == 'SUPER_ADMIN') {
+        _go(const InternalHomePage());
       } else {
         _go(const AdminHomePage());
       }

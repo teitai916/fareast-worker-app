@@ -69,4 +69,39 @@ public class SafetyServiceImpl implements SafetyService {
         workerVideoViewRepository.save(view);
         log.info("影片觀看記錄已保存: workerId={}, videoId={}, watchedDuration={}", workerId, videoId, watchedDuration);
     }
+
+    @Override
+    @Transactional
+    public void resetMandatoryVideos(Long workerId) {
+        List<SafetyVideo> mandatoryVideos = safetyVideoRepository.findAll().stream()
+                .filter(SafetyVideo::getMandatory)
+                .collect(java.util.stream.Collectors.toList());
+
+        for (SafetyVideo video : mandatoryVideos) {
+            Optional<WorkerVideoView> existingView = workerVideoViewRepository
+                    .findByWorkerIdAndVideoId(workerId, video.getId());
+            if (existingView.isPresent()) {
+                WorkerVideoView view = existingView.get();
+                view.setCompleted(false);
+                view.setWatchedDuration(0);
+                workerVideoViewRepository.save(view);
+                log.info("必修影片完成狀態已重置: workerId={}, videoId={}", workerId, video.getId());
+            }
+        }
+        log.info("工人必修影片完成狀態已全部重置: workerId={}, 共{}部影片", workerId, mandatoryVideos.size());
+    }
+
+    @Override
+    public boolean isCheckInAllowed(Long userId) {
+        List<SafetyVideo> mandatoryVideos = safetyVideoRepository.findAll().stream()
+                .filter(SafetyVideo::getMandatory)
+                .collect(java.util.stream.Collectors.toList());
+
+        if (mandatoryVideos.isEmpty()) {
+            return true;
+        }
+
+        int completedCount = workerVideoViewRepository.countByWorkerIdAndCompletedTrue(userId);
+        return completedCount >= mandatoryVideos.size();
+    }
 }

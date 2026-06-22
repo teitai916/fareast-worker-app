@@ -43,4 +43,7 @@ public class SafetyVideo {
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @Transient
+    private Boolean completed;
 }

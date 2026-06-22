@@ -80,7 +80,7 @@ sms:
   access-key-id: your-aliyun-access-key
   access-key-secret: your-aliyun-secret
   sign-name: 远东工友
-  template-code: SMS_XXXXXX
+  template-code: SMS_335260681
 
 # Face Recognition Configuration
 face:
@@ -92,8 +92,8 @@ face:
 
 # Feishu/Lark Configuration
 feishu:
-  app-id: your-feishu-app-id
-  app-secret: your-feishu-app-secret
+  app-id: cli_aaa88b348aba9cfe
+  app-secret: aUZPEJ59h58cHHQVwvN1Ge2cXE4qdWgS
 
 # Check-in geo-fencing
 checkin:

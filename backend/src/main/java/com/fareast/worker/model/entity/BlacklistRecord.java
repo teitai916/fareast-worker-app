@@ -20,21 +20,37 @@ public class BlacklistRecord {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(name = "worker_id", nullable = false)
     private Long workerId;
 
     @Column(nullable = false)
     private String reason;
 
-    @Column(nullable = false)
+    @Column(name = "added_by", nullable = false)
     private Long addedBy;
 
-    @Column(nullable = false)
+    @Column(name = "added_at", nullable = false)
     private LocalDateTime addedAt;
 
-    @Column
+    @Column(name = "removed_at")
     private LocalDateTime removedAt;
 
-    @Column
+    @Column(name = "removed_by")
     private Long removedBy;
+
+    // 新增字段
+    @Column
+    private String name;
+
+    @Column(name = "worker_registration_num")
+    private String workerRegistrationNum;
+
+    @Column
+    private Integer age;
+
+    @Column(name = "company_id")
+    private Long companyId;
+
+    @Column
+    private Boolean status;
 }

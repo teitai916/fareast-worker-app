@@ -33,6 +33,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
   int _personalSafetyScore = 100; // 個人安全分（100分制）
   int _siteSafetyScore = 15; // 地盤安全分（15分制）
   String? _companyName; // 所屬公司名稱
+  bool _checkInAllowed = true; // 必修安全影片是否全部完成
 
   @override
   void initState() {
@@ -57,6 +58,16 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
 
       if (!mounted) return;
 
+      // 檢查安全影片是否全部完成
+      bool checkInAllowed = true;
+      try {
+        checkInAllowed = await _api.isSafetyCheckInAllowed();
+      } catch (e) {
+        // 查詢失敗，預設允許打卡
+      }
+
+      if (!mounted) return;
+
       // 獲取地盤安全分（按地盤維度，總分15分）
       int siteSafetyScore = 15; // 預設15分
       try {
@@ -77,6 +88,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
         _personalSafetyScore = _profile?['safetyScore'] ?? 100;
         _siteSafetyScore = siteSafetyScore;
         _companyName = _profile?['companyName'] ?? '';
+        _checkInAllowed = checkInAllowed;
         _loading = false;
       });
     } catch (e) {
@@ -651,8 +663,9 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
 
   /// 構建快捷功能網格（固定4列，最多顯示7個+「更多」）
   Widget _buildQuickActionsGrid(bool hasSite) {
+    final canCheckIn = hasSite && _checkInAllowed;
     final actions = [
-      _QuickActionData(Icons.fingerprint, '打卡', hasSite, () =>
+      _QuickActionData(Icons.fingerprint, '打卡', canCheckIn, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const AttendancePage()))),
       _QuickActionData(Icons.smart_display, '安全培訓', true, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const SafetyVideosPage()))),
@@ -739,8 +752,9 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
   /// 顯示更多功能菜單（BottomSheet）
   void _showMoreMenu() {
     final hasSite = _currentSite != null;
+    final canCheckIn = hasSite && _checkInAllowed;
     final allActions = [
-      _QuickActionData(Icons.fingerprint, '打卡', hasSite, () =>
+      _QuickActionData(Icons.fingerprint, '打卡', canCheckIn, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const AttendancePage()))),
       _QuickActionData(Icons.smart_display, '安全培訓', true, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const SafetyVideosPage()))),

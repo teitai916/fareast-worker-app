@@ -23,6 +23,7 @@ import com.fareast.worker.repository.WorkerProfileRepository;
 import com.fareast.worker.repository.WorkerCompanyChangeRequestRepository;
 import com.fareast.worker.repository.WorkerSiteSafetyScoreRepository;
 import com.fareast.worker.service.NotificationService;
+import com.fareast.worker.service.SafetyService;
 import com.fareast.worker.service.SiteService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -74,6 +75,9 @@ public class ContractorController {
 
     @Autowired
     private AttendanceRepository attendanceRepository;
+
+    @Autowired
+    private SafetyService safetyService;
 
     /** Convert SiteApplication to Map (safe for JSON) */
     private Map<String, Object> toAppMap(SiteApplication a) {
@@ -198,6 +202,9 @@ public class ContractorController {
             
             // 初始化工人在地盤的安全分（总分15分）
             _initWorkerSiteSafetyScore(profile.getId(), app.getSiteId());
+            
+            // 重置工人的必修安全影片完成狀態，需重新觀看
+            safetyService.resetMandatoryVideos(app.getWorkerId());
         } else {
             app.setStatus(AuditStatus.REJECTED);
             log.info("申請已拒絕: applicationId={}, workerId={}", app.getId(), app.getWorkerId());
@@ -646,6 +653,9 @@ public class ContractorController {
             workerProfileRepository.saveAndFlush(profile);
             log.info("更換公司申請已批准: requestId={}, workerId={}, fromCompanyId={}, toCompanyId={}, dailySalary={}",
                     req.getId(), req.getWorkerId(), fromCompanyId, req.getToCompanyId(), req.getDailySalary());
+            
+            // 重置工人的必修安全影片完成狀態，需重新觀看
+            safetyService.resetMandatoryVideos(profile.getUserId());
         } else {
             req.setStatus(AuditStatus.REJECTED);
             req.setRejectReason(reviewRemark);

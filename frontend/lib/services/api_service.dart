@@ -572,6 +572,56 @@ class ApiService {
     return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
   }
 
+  // ===== Safety Video APIs =====
+
+  /// 獲取所有安全影片列表
+  Future<List<dynamic>> getSafetyVideos() async {
+    if (ApiConfig.mockMode) {
+      return [
+        {'id': 1, 'title': '工地安全守則入門', 'description': '介紹基本工地安全規範', 'videoUrl': '', 'duration': 30, 'mandatory': true},
+        {'id': 2, 'title': '高空作業安全須知', 'description': '高空工作安全要點', 'videoUrl': '', 'duration': 25, 'mandatory': true},
+      ];
+    }
+    final resp = await _client.get(
+      Uri.parse('$baseUrl/safety/videos'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    final data = jsonDecode(resp.body)['data'];
+    if (data == null) return [];
+    return data as List<dynamic>;
+  }
+
+  /// 記錄影片觀看進度
+  Future<void> markVideoWatched(int videoId, int watchedDuration) async {
+    if (ApiConfig.mockMode) return;
+    final resp = await _client.post(
+      Uri.parse('$baseUrl/safety/video-watched'),
+      headers: ApiConfig.headers(token: token),
+      body: jsonEncode({
+        'videoId': videoId,
+        'watchedDuration': watchedDuration,
+      }),
+    );
+    _handleError(resp);
+  }
+
+  /// 檢查必修安全影片是否全部完成，是否可以打卡
+  Future<bool> isSafetyCheckInAllowed() async {
+    if (ApiConfig.mockMode) return true;
+    try {
+      final resp = await _client.get(
+        Uri.parse('$baseUrl/safety/completion-status'),
+        headers: ApiConfig.headers(token: token),
+      );
+      _handleError(resp);
+      final data = jsonDecode(resp.body)['data'];
+      return data['checkInAllowed'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ===== Attendance APIs =====
 
   /// 入場/離場打卡
@@ -764,5 +814,233 @@ class ApiService {
 
   void dispose() {
     _client.close();
+  }
+
+  // ===== Internal Staff APIs =====
+
+  /// 獲取地盤總覽（各地盤工人統計）
+  Future<List<Map<String, dynamic>>> getInternalSites() async {
+    if (ApiConfig.mockMode) return [];
+    final resp = await _client.get(
+      Uri.parse('$baseUrl/internal/sites'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    return (jsonDecode(resp.body)['data'] as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 獲取所有公司（供搜索下拉用）
+  Future<List<Map<String, dynamic>>> getInternalCompanies() async {
+    if (ApiConfig.mockMode) return [];
+    final resp = await _client.get(
+      Uri.parse('$baseUrl/internal/companies'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    return (jsonDecode(resp.body)['data'] as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 搜索工人
+  Future<List<Map<String, dynamic>>> searchInternalWorkers({
+    String? name,
+    int? companyId,
+  }) async {
+    if (ApiConfig.mockMode) return [];
+    final params = <String, String>{};
+    if (name != null && name.isNotEmpty) params['name'] = name;
+    if (companyId != null) params['companyId'] = companyId.toString();
+    final uri = Uri.parse('$baseUrl/internal/workers/search').replace(queryParameters: params.isEmpty ? null : params);
+    final resp = await _client.get(uri, headers: ApiConfig.headers(token: token));
+    _handleError(resp);
+    return (jsonDecode(resp.body)['data'] as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 獲取被鎖卡工人列表
+  Future<List<Map<String, dynamic>>> getLockedWorkers() async {
+    if (ApiConfig.mockMode) return [];
+    final resp = await _client.get(
+      Uri.parse('$baseUrl/internal/workers/locked'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    return (jsonDecode(resp.body)['data'] as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 扣分
+  Future<Map<String, dynamic>> deductWorkerScore(int workerId, int points, String reason) async {
+    if (ApiConfig.mockMode) return {};
+    final resp = await _client.post(
+      Uri.parse('$baseUrl/internal/workers/$workerId/deduct'),
+      headers: ApiConfig.headers(token: token),
+      body: jsonEncode({'points': points, 'reason': reason}),
+    );
+    _handleError(resp);
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
+  }
+
+  /// 鎖卡/解鎖
+  Future<void> toggleWorkerLock(int workerId, bool lock) async {
+    if (ApiConfig.mockMode) return;
+    final resp = await _client.post(
+      Uri.parse('$baseUrl/internal/workers/$workerId/toggle-lock'),
+      headers: ApiConfig.headers(token: token),
+      body: jsonEncode({'lock': lock}),
+    );
+    _handleError(resp);
+  }
+
+  /// 添加黑名單
+  Future<void> addBlacklist(int workerId, String reason) async {
+    if (ApiConfig.mockMode) return;
+    final resp = await _client.post(
+      Uri.parse('$baseUrl/admin/blacklist/add'),
+      headers: ApiConfig.headers(token: token),
+      body: jsonEncode({'workerId': workerId, 'reason': reason}),
+    );
+    _handleError(resp);
+  }
+
+  // ===== Internal Staff Home APIs =====
+
+  /// 內部人員首頁數據
+  Future<Map<String, dynamic>> getInternalHome() async {
+    if (ApiConfig.mockMode) {
+      return {
+        'user': {'name': '測試管理員', 'phone': '10000000001', 'role': 'SITE_MANAGER'},
+        'currentSite': null,
+        'hasSite': false,
+        'hasPendingApplication': false,
+        'pendingApplication': null,
+        'mySites': [],
+        'availableSites': [],
+        'todayAttendance': null,
+      };
+    }
+    final resp = await _client.get(
+      Uri.parse('$baseUrl/internal/home'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
+  }
+
+  /// 內部人員申請加入地盤
+  Future<Map<String, dynamic>> applyInternalSite(int siteId) async {
+    if (ApiConfig.mockMode) return {'autoApproved': true};
+    final resp = await _client.post(
+      Uri.parse('$baseUrl/internal/apply-site'),
+      headers: ApiConfig.headers(token: token),
+      body: jsonEncode({'siteId': siteId}),
+    );
+    _handleError(resp);
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
+  }
+
+  /// 撤銷內部人員地盤申請
+  Future<void> cancelInternalSiteApplication() async {
+    if (ApiConfig.mockMode) return;
+    final resp = await _client.post(
+      Uri.parse('$baseUrl/internal/cancel-site-application'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+  }
+
+  /// 獲取已加入的地盤列表
+  Future<List<Map<String, dynamic>>> getMySites() async {
+    if (ApiConfig.mockMode) return [];
+    final resp = await _client.get(
+      Uri.parse('$baseUrl/internal/my-sites'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    return (jsonDecode(resp.body)['data'] as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 切換當前地盤
+  Future<void> switchSite(int siteId) async {
+    if (ApiConfig.mockMode) return;
+    final resp = await _client.put(
+      Uri.parse('$baseUrl/internal/switch-site/$siteId'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+  }
+
+  // ===== Internal Staff Attendance APIs =====
+
+  /// 内部人员打卡
+  Future<Map<String, dynamic>> internalCheckIn({int? siteId, String checkInType = 'MANUAL'}) async {
+    if (ApiConfig.mockMode) return {};
+    final body = <String, dynamic>{'checkInType': checkInType};
+    if (siteId != null) body['siteId'] = siteId;
+    final resp = await _client.post(
+      Uri.parse('$baseUrl/internal/check-in'),
+      headers: ApiConfig.headers(token: token),
+      body: jsonEncode(body),
+    );
+    _handleError(resp);
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
+  }
+
+  /// 内部人员获取今日考勤
+  Future<Map<String, dynamic>?> internalGetDailyAttendance(String date) async {
+    if (ApiConfig.mockMode) return null;
+    try {
+      final resp = await _client.get(
+        Uri.parse('$baseUrl/internal/attendance/daily?date=$date'),
+        headers: ApiConfig.headers(token: token),
+      );
+      _handleError(resp);
+      final data = jsonDecode(resp.body)['data'];
+      if (data == null || data is! Map) return null;
+      return data as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 内部人员获取月度考勤
+  Future<List<int>> internalGetMonthlyAttendance(int year, int month) async {
+    if (ApiConfig.mockMode) return [];
+    try {
+      final resp = await _client.get(
+        Uri.parse('$baseUrl/internal/attendance/monthly?year=$year&month=$month'),
+        headers: ApiConfig.headers(token: token),
+      );
+      _handleError(resp);
+      final data = jsonDecode(resp.body)['data'];
+      if (data == null || data is! List) return [];
+      return (data).cast<int>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// 按手机号加入黑名单 + 更新平安卡信息
+  Future<Map<String, dynamic>> blacklistByPhone({
+    required String phone,
+    required String reason,
+    String? safetyCardNumber,
+    String? safetyCardAttachment,
+  }) async {
+    if (ApiConfig.mockMode) return {};
+    final body = <String, dynamic>{
+      'phone': phone,
+      'reason': reason,
+    };
+    if (safetyCardNumber != null && safetyCardNumber.isNotEmpty) {
+      body['safetyCardNumber'] = safetyCardNumber;
+    }
+    if (safetyCardAttachment != null && safetyCardAttachment.isNotEmpty) {
+      body['safetyCardAttachment'] = safetyCardAttachment;
+    }
+    final resp = await _client.post(
+      Uri.parse('$baseUrl/internal/workers/blacklist-by-phone'),
+      headers: ApiConfig.headers(token: token),
+      body: jsonEncode(body),
+    );
+    _handleError(resp);
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
   }
 }

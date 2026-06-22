@@ -39,6 +39,9 @@ class _LoginFormPageState extends State<LoginFormPage> {
       if (user.role == 'CONTRACTOR') {
         // 判頭直接進入判頭首頁
         route = '/contractor/home';
+      } else if (user.role == 'SITE_MANAGER' || user.role == 'PROJECT_MANAGER' || user.role == 'SUPER_ADMIN') {
+        // 內部工作人員
+        route = '/internal/home';
       } else {
         // 工人：檢查人臉是否已登記
         try {

@@ -16,6 +16,7 @@ import 'package:fareast_worker_app/pages/contractor/contractor_home_page.dart';
 import 'package:fareast_worker_app/pages/contractor/contractor_review_page.dart';
 import 'package:fareast_worker_app/pages/notifications_page.dart';
 import 'package:fareast_worker_app/pages/admin/admin_home_page.dart';
+import 'package:fareast_worker_app/pages/internal/internal_home_page.dart';
 
 class AppRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -55,6 +56,8 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const NotificationsPage());
       case '/admin/home':
         return MaterialPageRoute(builder: (_) => const AdminHomePage());
+      case '/internal/home':
+        return MaterialPageRoute(builder: (_) => const InternalHomePage());
       default:
         return MaterialPageRoute(builder: (_) => const LoginPage());
     }

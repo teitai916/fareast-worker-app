@@ -15,6 +15,7 @@ import com.fareast.worker.repository.UserRepository;
 import com.fareast.worker.repository.WorkerProfileRepository;
 import com.fareast.worker.repository.WorkerSiteSafetyScoreRepository;
 import com.fareast.worker.service.NotificationService;
+import com.fareast.worker.service.SafetyService;
 import com.fareast.worker.service.SiteService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,6 +48,9 @@ public class SiteServiceImpl implements SiteService {
 
     @Autowired
     private WorkerSiteSafetyScoreRepository workerSiteSafetyScoreRepository;
+
+    @Autowired
+    private SafetyService safetyService;
 
     @Override
     public java.util.List<Site> getAllSites() {
@@ -171,6 +175,9 @@ public class SiteServiceImpl implements SiteService {
             
             // 初始化工人在新地盤的安全分（总分15分）
             _initWorkerSiteSafetyScore(request.getWorkerId(), request.getToSiteId());
+            
+            // 重置工人的必修安全影片完成狀態，需重新觀看
+            safetyService.resetMandatoryVideos(profile.getUserId());
             
             // 验证是否更新成功
             WorkerProfile verifyProfile = workerProfileRepository.findByUserId(request.getWorkerId()).orElse(null);

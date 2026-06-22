@@ -41,7 +41,7 @@ public class AuthController {
 
     @PostMapping("/send-sms")
     public ApiResponse<Void> sendSms(@Valid @RequestBody SmsRequest request) {
-        smsService.sendSms(request.getPhone());
+        smsService.sendVerificationCode(request.getPhone());
         return ApiResponse.success(null);
     }
 
