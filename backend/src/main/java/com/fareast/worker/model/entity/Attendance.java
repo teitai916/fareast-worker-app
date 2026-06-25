@@ -49,4 +49,13 @@ public class Attendance {
 
     @Column
     private String locationAddress;
+
+    @Column
+    private String bluetoothBeaconId;
+
+    @Column
+    private String checkInPhotoUrl;
+
+    @Column
+    private String checkOutPhotoUrl;
 }

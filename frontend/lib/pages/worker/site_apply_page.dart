@@ -28,13 +28,22 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
   int? _selectedSiteId;
   int? _selectedCompanyId;
   String? _error;
-  String? _contractAttachmentName; // 选中的文件名
-  Uint8List? _contractAttachmentBytes; // 文件内容（Web 下用 bytes）
+  String? _contractAttachmentName;
+  Uint8List? _contractAttachmentBytes;
+
+  // 證書資料
+  final _safetyCardController = TextEditingController();
+  final _workerRegCertController = TextEditingController();
+  String? _safetyCardAttachmentUrl;
+  String? _safetyCardAttachmentName;
+  String? _workerRegCertAttachmentUrl;
+  String? _workerRegCertAttachmentName;
+  bool _certsComplete = false;
 
   @override
   void initState() {
     super.initState();
-    _selectedSiteId = widget.siteId; // 如果提供了 siteId，则预选
+    _selectedSiteId = widget.siteId;
     _loadData();
   }
 
@@ -42,6 +51,8 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
   void dispose() {
     _remarkController.dispose();
     _dailyWageController.dispose();
+    _safetyCardController.dispose();
+    _workerRegCertController.dispose();
     super.dispose();
   }
 
@@ -50,14 +61,32 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
       final results = await Future.wait([
         _api.getWorkerHome(),
         _api.getContractorCompanies(),
+        _api.getWorkerProfile(),
       ]);
       if (!mounted) return;
+      final homeData = results[0] as Map<String, dynamic>;
+      final profileData = results[2] as Map<String, dynamic>;
+
+      final safetyCard = profileData['safetyCard'] as String? ?? '';
+      final safetyCardAtt = profileData['safetyCardAttachment'] as String? ?? '';
+      final regNum = profileData['workerRegistrationNum'] as String? ?? '';
+      final regAtt = profileData['workerRegCertAttachment'] as String? ?? '';
+
       setState(() {
-        final homeData = results[0] as Map<String, dynamic>;
         _sites = homeData['availableSites'] as List? ?? [];
         _companies = results[1] as List;
         _sitesLoading = false;
         _companiesLoading = false;
+
+        _safetyCardController.text = safetyCard;
+        _safetyCardAttachmentUrl = safetyCardAtt.isNotEmpty ? safetyCardAtt : null;
+        _safetyCardAttachmentName = safetyCardAtt.isNotEmpty ? '已上傳' : null;
+        _workerRegCertController.text = regNum;
+        _workerRegCertAttachmentUrl = regAtt.isNotEmpty ? regAtt : null;
+        _workerRegCertAttachmentName = regAtt.isNotEmpty ? '已上傳' : null;
+
+        _certsComplete = safetyCard.isNotEmpty && safetyCardAtt.isNotEmpty
+            && regNum.isNotEmpty && regAtt.isNotEmpty;
       });
     } catch (e) {
       if (!mounted) return;
@@ -65,57 +94,72 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
     }
   }
 
-  Future<void> _pickContractFile() async {
+  Future<void> _pickAndUploadCert(bool isSafetyCard) async {
     try {
-      print('[DEBUG] Opening file picker...');
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.any, // 改用 any，然后手动检查扩展名
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
         allowMultiple: false,
         withData: true,
       );
-      
-      if (result != null && result.files.isNotEmpty) {
-        final file = result.files.single;
-        print('[DEBUG] File selected: ${file.name}, size: ${file.bytes?.length}');
-        
-        // 检查文件扩展名
-        final ext = file.name.split('.').last.toLowerCase();
-        if (!['pdf', 'jpg', 'jpeg', 'png'].contains(ext)) {
-          _showMsg('只支持 PDF、JPG、PNG 格式的文件');
-          return;
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.first;
+      if (file.bytes == null) return;
+
+      setState(() => _loading = true);
+      final url = await _api.uploadFile(
+        bytes: file.bytes!, filename: file.name, folder: 'certificates',
+      );
+      setState(() {
+        if (isSafetyCard) {
+          _safetyCardAttachmentUrl = url;
+          _safetyCardAttachmentName = file.name;
+        } else {
+          _workerRegCertAttachmentUrl = url;
+          _workerRegCertAttachmentName = file.name;
         }
-        
-        setState(() {
-          _contractAttachmentName = file.name;
-          _contractAttachmentBytes = file.bytes;
-        });
-        print('[DEBUG] File loaded successfully');
-      } else {
-        print('[DEBUG] File selection cancelled');
-      }
-    } catch (e, stackTrace) {
-      print('[ERROR] File picker error: $e');
-      print('[ERROR] Stack trace: $stackTrace');
-      if (mounted) {
-        _showMsg('文件选择失败: $e');
-      }
+        _loading = false;
+      });
+      if (!mounted) return;
+      _showMsg('${file.name} 上傳成功', isError: false);
+    } catch (e) {
+      setState(() => _loading = false);
+      if (!mounted) return;
+      _showMsg('上傳失敗：$e');
     }
   }
 
-  /// 上传附件到服务器，返回服务器路径
-  Future<String> _uploadAttachment() async {
-    if (_contractAttachmentBytes == null || _contractAttachmentName == null) {
-      throw Exception('請上傳僱傭合約附件');
+  /// 保存證書資料到後端
+  Future<bool> _saveCertificates() async {
+    final safetyCard = _safetyCardController.text.trim();
+    final regNum = _workerRegCertController.text.trim();
+    if (safetyCard.isEmpty || _safetyCardAttachmentUrl == null || _safetyCardAttachmentUrl!.isEmpty
+        || regNum.isEmpty || _workerRegCertAttachmentUrl == null || _workerRegCertAttachmentUrl!.isEmpty) {
+      _showMsg('請完善平安卡及工人註冊證資料（編號+附件需全部填寫）');
+      return false;
     }
-    return await _api.uploadFile(
-      bytes: _contractAttachmentBytes!,
-      filename: _contractAttachmentName!,
-      folder: 'contracts',
-    );
+    try {
+      await _api.updateWorkerProfile({
+        'safetyCard': safetyCard,
+        'safetyCardAttachment': _safetyCardAttachmentUrl,
+        'workerRegistrationNum': regNum,
+        'workerRegCertAttachment': _workerRegCertAttachmentUrl,
+      });
+      setState(() => _certsComplete = true);
+      return true;
+    } catch (e) {
+      _showMsg('證書保存失敗：$e');
+      return false;
+    }
   }
 
   Future<void> _submit() async {
-    // 必填验证
+    // 先確保證書資料完整
+    if (!_certsComplete) {
+      final saved = await _saveCertificates();
+      if (!saved) return;
+    }
+
     if (_selectedSiteId == null) { _showMsg('請選擇地盤'); return; }
     if (_selectedCompanyId == null) { _showMsg('請選擇所屬判頭公司'); return; }
     if (_dailyWageController.text.trim().isEmpty) { _showMsg('請填寫每日薪酬'); return; }
@@ -147,7 +191,37 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
     }
   }
 
+  Future<void> _pickContractFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+        allowMultiple: false,
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.single;
+        setState(() {
+          _contractAttachmentName = file.name;
+          _contractAttachmentBytes = file.bytes;
+        });
+      }
+    } catch (e) {
+      _showMsg('文件選擇失敗：$e');
+    }
+  }
+
+  Future<String> _uploadAttachment() async {
+    if (_contractAttachmentBytes == null || _contractAttachmentName == null) {
+      throw Exception('請上傳僱傭合約附件');
+    }
+    return await _api.uploadFile(
+      bytes: _contractAttachmentBytes!, filename: _contractAttachmentName!, folder: 'contracts',
+    );
+  }
+
   void _showMsg(String msg, {bool isError = true}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
@@ -178,6 +252,12 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // 證書資料區域（未完善時顯示紅框提醒）
+        if (!_certsComplete) ...[
+          _buildCertSection(),
+          const SizedBox(height: 24),
+        ],
+
         // 提示
         Container(
           padding: const EdgeInsets.all(16),
@@ -198,19 +278,16 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
         ),
         const SizedBox(height: 20),
 
-        // 地盘选择（弹出单选）
         const Text('選擇地盤 *', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         _buildSiteSelector(),
         const SizedBox(height: 20),
 
-        // 判头公司选择（弹出单选）
         const Text('所屬判頭公司 *', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         _buildCompanySelector(),
         const SizedBox(height: 20),
 
-        // 每日薪酬
         const Text('每日薪酬（HKD）*', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         TextField(
@@ -224,13 +301,11 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
         ),
         const SizedBox(height: 20),
 
-        // 雇佣合同上传
         const Text('僱傭合約附件 *', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        _buildFileUpload(),
+        _buildFileUpload('僱傭合約', _contractAttachmentName, _pickContractFile),
         const SizedBox(height: 20),
 
-        // 申请说明
         const Text('申請說明（選填）', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         TextField(
@@ -244,7 +319,6 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
         ),
         const SizedBox(height: 24),
 
-        // 提交按钮
         SizedBox(
           width: double.infinity,
           height: 52,
@@ -258,297 +332,182 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
                 : const Text('提交申請', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           ),
         ),
+        const SizedBox(height: 32),
       ],
     );
   }
 
-  /// 地盘选择触发卡片
-  Widget _buildSiteSelector() {
-    final selectedSite = _sites.firstWhere(
-      (s) => s['id'] == _selectedSiteId,
-      orElse: () => null,
+  /// 證書資料區塊（強制填寫）
+  Widget _buildCertSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.warningColor, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.warning_amber, color: AppTheme.warningColor, size: 20),
+              SizedBox(width: 8),
+              Text('請先完善證書資料', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.warningColor)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text('申請加入地盤前，需填寫平安卡及工人註冊證資料',
+              style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+          const SizedBox(height: 16),
+
+          // 平安卡編號
+          TextFormField(
+            controller: _safetyCardController,
+            decoration: const InputDecoration(
+              labelText: '平安卡 (綠卡) 編號 *', border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildFileUpload('平安卡附件', _safetyCardAttachmentName, () => _pickAndUploadCert(true)),
+          const SizedBox(height: 16),
+
+          // 註冊證編號
+          TextFormField(
+            controller: _workerRegCertController,
+            decoration: const InputDecoration(
+              labelText: '工人註冊證編號 *', border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildFileUpload('註冊證附件', _workerRegCertAttachmentName, () => _pickAndUploadCert(false)),
+        ],
+      ),
     );
+  }
+
+  Widget _buildFileUpload(String label, String? fileName, VoidCallback onTap) {
+    final uploaded = fileName != null;
     return InkWell(
-      onTap: _sites.isEmpty ? null : () => _showSitePicker(),
-      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: uploaded ? AppTheme.successColor : Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(4),
         ),
         child: Row(
           children: [
             Icon(
-              Icons.location_city,
-              color: selectedSite != null ? AppTheme.primaryColor : AppTheme.textHint,
-              size: 22,
+              uploaded ? Icons.check_circle : Icons.upload_file,
+              color: uploaded ? AppTheme.successColor : AppTheme.primaryColor,
+              size: 18,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: selectedSite != null
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          selectedSite['name'] ?? '',
-                          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
-                        ),
-                        if (selectedSite['address'] != null)
-                          Text(
-                            selectedSite['address'],
-                            style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
-                          ),
-                      ],
-                    )
-                  : Text(
-                      _sites.isEmpty ? '暫無可申請的地盤' : '請選擇地盤',
-                      style: TextStyle(color: AppTheme.textHint, fontSize: 15),
-                    ),
-            ),
-            Icon(Icons.chevron_right, color: Colors.grey.shade400),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 弹出地盘选择 BottomSheet
-  void _showSitePicker() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.6,
-          minChildSize: 0.4,
-          maxChildSize: 0.9,
-          expand: false,
-          builder: (_, scrollCtrl) {
-            return Column(
-              children: [
-                // 顶部标题栏
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Text('選擇地盤', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('取消'),
-                      ),
-                    ],
-                  ),
-                ),
-                // 列表
-                Expanded(
-                  child: ListView.builder(
-                    controller: scrollCtrl,
-                    itemCount: _sites.length,
-                    itemBuilder: (_, i) {
-                      final site = _sites[i];
-                      final selected = _selectedSiteId == site['id'];
-                      return ListTile(
-                        leading: Container(
-                          width: 40, height: 40,
-                          decoration: BoxDecoration(
-                            color: selected
-                                ? AppTheme.primaryColor.withOpacity(0.15)
-                                : AppTheme.backgroundColor,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            Icons.location_city,
-                            color: selected ? AppTheme.primaryColor : AppTheme.textHint,
-                            size: 20,
-                          ),
-                        ),
-                        title: Text(
-                          site['name'] ?? '',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w500,
-                            color: selected ? AppTheme.primaryColor : AppTheme.textPrimary,
-                          ),
-                        ),
-                        subtitle: site['address'] != null
-                            ? Text(site['address'], style: const TextStyle(fontSize: 13))
-                            : null,
-                        trailing: selected
-                            ? const Icon(Icons.check_circle, color: AppTheme.primaryColor)
-                            : Icon(Icons.circle_outlined, color: Colors.grey.shade300),
-                        onTap: () {
-                          setState(() => _selectedSiteId = site['id'] as int);
-                          Navigator.pop(ctx);
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  /// 判头公司选择触发卡片
-  Widget _buildCompanySelector() {
-    final selectedCompany = _companies.firstWhere(
-      (c) => c['id'] == _selectedCompanyId,
-      orElse: () => null,
-    );
-    return InkWell(
-      onTap: _companies.isEmpty ? null : () => _showCompanyPicker(),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.business,
-              color: selectedCompany != null ? AppTheme.primaryColor : AppTheme.textHint,
-              size: 22,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: selectedCompany != null
-                  ? Text(
-                      selectedCompany['name'] ?? '',
-                      style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
-                    )
-                  : Text(
-                      _companies.isEmpty ? '暫無判頭公司' : '請選擇判頭公司',
-                      style: TextStyle(color: AppTheme.textHint, fontSize: 15),
-                    ),
-            ),
-            Icon(Icons.chevron_right, color: Colors.grey.shade400),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 弹出判头公司选择 BottomSheet
-  void _showCompanyPicker() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.5,
-          minChildSize: 0.3,
-          maxChildSize: 0.8,
-          expand: false,
-          builder: (_, scrollCtrl) {
-            return Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Text('選擇判頭公司', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('取消'),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    controller: scrollCtrl,
-                    itemCount: _companies.length,
-                    itemBuilder: (_, i) {
-                      final c = _companies[i];
-                      final selected = _selectedCompanyId == c['id'];
-                      return ListTile(
-                        leading: Container(
-                          width: 40, height: 40,
-                          decoration: BoxDecoration(
-                            color: selected
-                                ? AppTheme.primaryColor.withOpacity(0.15)
-                                : AppTheme.backgroundColor,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            Icons.business,
-                            color: selected ? AppTheme.primaryColor : AppTheme.textHint,
-                            size: 20,
-                          ),
-                        ),
-                        title: Text(
-                          c['name'] ?? '',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w500,
-                            color: selected ? AppTheme.primaryColor : AppTheme.textPrimary,
-                          ),
-                        ),
-                        trailing: selected
-                            ? const Icon(Icons.check_circle, color: AppTheme.primaryColor)
-                            : Icon(Icons.circle_outlined, color: Colors.grey.shade300),
-                        onTap: () {
-                          setState(() => _selectedCompanyId = c['id'] as int);
-                          Navigator.pop(ctx);
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildFileUpload() {
-    return InkWell(
-      onTap: _pickContractFile,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              _contractAttachmentName != null ? Icons.check_circle : Icons.upload_file,
-              color: _contractAttachmentName != null ? Colors.green : AppTheme.textHint,
-            ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
-                _contractAttachmentName ?? '點擊上傳僱傭合約（PDF/JPG/PNG）',
+                uploaded ? fileName! : '點擊上傳$label（PDF/JPG/PNG）',
                 style: TextStyle(
-                  color: _contractAttachmentName != null ? AppTheme.textPrimary : AppTheme.textHint,
-                  fontSize: 14,
+                  fontSize: 13,
+                  color: uploaded ? AppTheme.successColor : AppTheme.textHint,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ────────── 以下为原有选择器，保持不变 ──────────
+
+  Widget _buildSiteSelector() { /* same as before */ return _buildSelector(
+    icon: Icons.location_city,
+    emptyText: '暫無可申請的地盤',
+    hintText: '請選擇地盤',
+    selected: _sites.firstWhere((s) => s['id'] == _selectedSiteId, orElse: () => null),
+    items: _sites,
+    selectedId: _selectedSiteId,
+    onSelected: (id) => setState(() => _selectedSiteId = id),
+    subtitleKey: 'address',
+  );}
+
+  Widget _buildCompanySelector() { return _buildSelector(
+    icon: Icons.business,
+    emptyText: '暫無判頭公司',
+    hintText: '請選擇判頭公司',
+    selected: _companies.firstWhere((c) => c['id'] == _selectedCompanyId, orElse: () => null),
+    items: _companies,
+    selectedId: _selectedCompanyId,
+    onSelected: (id) => setState(() => _selectedCompanyId = id),
+  );}
+
+  Widget _buildSelector({
+    required IconData icon,
+    required String emptyText,
+    required String hintText,
+    required dynamic selected,
+    required List<dynamic> items,
+    required int? selectedId,
+    required ValueChanged<int> onSelected,
+    String? subtitleKey,
+  }) {
+    return InkWell(
+      onTap: items.isEmpty ? null : () => _showPicker(items: items, selectedId: selectedId, onSelected: onSelected, title: hintText, subtitleKey: subtitleKey, icon: icon),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(12)),
+        child: Row(children: [
+          Icon(icon, color: selected != null ? AppTheme.primaryColor : AppTheme.textHint, size: 22),
+          const SizedBox(width: 12),
+          Expanded(child: selected != null
+            ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(selected['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
+                if (subtitleKey != null && selected[subtitleKey] != null)
+                  Text(selected[subtitleKey], style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+              ])
+            : Text(items.isEmpty ? emptyText : hintText, style: TextStyle(color: AppTheme.textHint, fontSize: 15))),
+          Icon(Icons.chevron_right, color: Colors.grey.shade400),
+        ]),
+      ),
+    );
+  }
+
+  void _showPicker({required List<dynamic> items, required int? selectedId, required ValueChanged<int> onSelected, required String title, String? subtitleKey, IconData icon = Icons.location_city}) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.5, minChildSize: 0.3, maxChildSize: 0.8, expand: false,
+        builder: (_, scrollCtrl) => Column(children: [
+          Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.shade200))),
+            child: Row(children: [
+              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+            ]),
+          ),
+          Expanded(child: ListView.builder(
+            controller: scrollCtrl, itemCount: items.length,
+            itemBuilder: (_, i) {
+              final item = items[i];
+              final sel = selectedId == item['id'];
+              return ListTile(
+                leading: Container(width: 40, height: 40,
+                  decoration: BoxDecoration(color: sel ? AppTheme.primaryColor.withOpacity(0.15) : AppTheme.backgroundColor, borderRadius: BorderRadius.circular(10)),
+                  child: Icon(icon, color: sel ? AppTheme.primaryColor : AppTheme.textHint, size: 20)),
+                title: Text(item['name'] ?? '', style: TextStyle(fontWeight: FontWeight.w500, color: sel ? AppTheme.primaryColor : AppTheme.textPrimary)),
+                subtitle: subtitleKey != null && item[subtitleKey] != null ? Text(item[subtitleKey], style: const TextStyle(fontSize: 13)) : null,
+                trailing: sel ? const Icon(Icons.check_circle, color: AppTheme.primaryColor) : Icon(Icons.circle_outlined, color: Colors.grey.shade300),
+                onTap: () { onSelected(item['id'] as int); Navigator.pop(ctx); },
+              );
+            },
+          )),
+        ]),
       ),
     );
   }

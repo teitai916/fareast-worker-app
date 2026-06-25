@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
+import 'package:fareast_worker_app/services/ble_service.dart';
 
 class AttendancePage extends StatefulWidget {
   const AttendancePage({super.key});
@@ -36,6 +37,15 @@ class _AttendancePageState extends State<AttendancePage> {
   // 工人所屬地盤 ID（從工人資料獲取，打卡時使用）
   int? _currentSiteId;
   String? _currentSiteName;
+
+  // 地盘蓝牙信标 UUID 列表（逗号分隔）
+  String? _siteBeaconIds;
+
+  // BLE 扫描状态
+  bool _bleScanning = false;
+
+  // 锁定状态（被锁卡/黑名单）
+  bool _isLocked = false;
 
   // 打卡狀態
   bool get _checkedIn {
@@ -155,9 +165,12 @@ class _AttendancePageState extends State<AttendancePage> {
     try {
       final homeData = await ApiService().getWorkerHome();
       final currentSite = homeData['currentSite'] as Map<String, dynamic>?;
+      final profile = homeData['profile'] as Map<String, dynamic>?;
       setState(() {
         _currentSiteId = currentSite?['id'] as int?;
         _currentSiteName = currentSite?['name'] as String?;
+        _siteBeaconIds = currentSite?['bluetoothBeaconId'] as String?;
+        _isLocked = (profile?['cardLocked'] == true || profile?['blacklisted'] == true);
       });
     } catch (e) {
       // 載入失敗不阻斷打卡功能，_onCheckIn 會處理
@@ -190,6 +203,18 @@ class _AttendancePageState extends State<AttendancePage> {
 
   /// 打卡（入場/離場）
   Future<void> _onCheckIn() async {
+    // 鎖定狀態禁止打卡
+    if (_isLocked) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('帳號已被鎖定，無法打卡，請聯繫管理員'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+      return;
+    }
+
     // 離場打卡前彈出確認框
     if (_checkedIn) {
       final confirmed = await showDialog<bool>(
@@ -227,21 +252,88 @@ class _AttendancePageState extends State<AttendancePage> {
       return;
     }
 
-    // 獲取 GPS 定位
-    final position = await _getPosition();
-    if (position == null) return; // 定位失败已在 _getPosition 中处理
+    // ─── 蓝牙信标扫描 ───
+    String? matchedBeaconId;
+    List<Map<String, dynamic>>? nearbyBeacons;
+    bool useBluetooth = false;
+
+    if (_siteBeaconIds != null && _siteBeaconIds!.trim().isNotEmpty) {
+      useBluetooth = true;
+
+      // 显示扫描中状态
+      setState(() => _bleScanning = true);
+      if (!mounted) return;
+
+      try {
+        final scanResult = await BleService().scanForBeacon(
+          _siteBeaconIds!,
+          timeout: const Duration(seconds: 10),
+        );
+        matchedBeaconId = scanResult.matchedUuid;
+        nearbyBeacons = scanResult.allBeacons.map((b) => b.toJson()).toList();
+      } on BleException catch (e) {
+        setState(() => _bleScanning = false);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+        return;
+      } catch (e) {
+        setState(() => _bleScanning = false);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('藍牙掃描失敗：$e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+        return;
+      }
+
+      setState(() => _bleScanning = false);
+
+      if (matchedBeaconId == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('未檢測到地盤藍牙信標，請確認您在地盤範圍內且藍牙已開啟'),
+            backgroundColor: AppTheme.errorColor,
+            duration: Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
+    } else {
+      // 地盘未配置蓝牙信标，降级为 GPS 模式
+      useBluetooth = false;
+    }
+
+    // ─── 获取 GPS 定位 ───
+    // 蓝牙模式: GPS 仅记录，不验证距离
+    // GPS 模式: GPS 用于地理围栏验证
+    final position = await _getPosition(
+      requiredForCheckIn: !useBluetooth, // GPS 模式下定位失败会阻断
+    );
+    if (position == null && !useBluetooth) return;
     _locationFailCount = 0;
 
-    // 人臉驗證
-    final facePassed = await _showFaceVerification();
-    if (!facePassed) return;
+    // 拍照存檔（入場和離場都需要拍照存檔）
+    final isCheckOut = _checkedIn;
+    final photoBase64 = await _captureCheckInPhoto(isCheckOut: isCheckOut);
+    if (photoBase64 == null) return;
 
     try {
       final result = await ApiService().checkIn(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        checkInType: 'BLUETOOTH',
+        latitude: position?.latitude,
+        longitude: position?.longitude,
+        checkInType: useBluetooth ? 'BLUETOOTH' : 'GPS',
         siteId: siteId,
+        bluetoothBeaconId: matchedBeaconId,
+        nearbyBeacons: nearbyBeacons,
+        photo: photoBase64,
       );
       await _loadTodayRecord();
       await _loadMonthlyDays();
@@ -267,10 +359,12 @@ class _AttendancePageState extends State<AttendancePage> {
   }
 
   /// 獲取 GPS 定位，處理各種異常情況
-  Future<Position?> _getPosition() async {
+  /// [requiredForCheckIn] 為 true 時，定位失敗會阻斷打卡；false 時僅記錄不阻斷
+  Future<Position?> _getPosition({bool requiredForCheckIn = true}) async {
     // 1. 檢查 GPS 是否開啟
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
+      if (!requiredForCheckIn) return null; // 蓝牙模式：静默跳过
       _locationFailCount++;
       if (!mounted) return null;
       final shouldOpen = await showDialog<bool>(
@@ -306,6 +400,7 @@ class _AttendancePageState extends State<AttendancePage> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
+        if (!requiredForCheckIn) return null;
         if (!mounted) return null;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -317,6 +412,7 @@ class _AttendancePageState extends State<AttendancePage> {
       }
     }
     if (permission == LocationPermission.deniedForever) {
+      if (!requiredForCheckIn) return null;
       _locationFailCount++;
       if (!mounted) return null;
       await showDialog(
@@ -363,6 +459,7 @@ class _AttendancePageState extends State<AttendancePage> {
 
       return position;
     } on TimeoutException {
+      if (!requiredForCheckIn) return null;
       _locationFailCount++;
       if (!mounted) return null;
 
@@ -405,6 +502,7 @@ class _AttendancePageState extends State<AttendancePage> {
       if (retry == true) return _getPosition(); // 递归重试
       return null;
     } catch (e) {
+      if (!requiredForCheckIn) return null;
       _locationFailCount++;
       if (!mounted) return null;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -417,17 +515,19 @@ class _AttendancePageState extends State<AttendancePage> {
     }
   }
 
-  /// 人臉驗證：打開相機拍照 → 發送到後端比對 → 返回是否通過
-  Future<bool> _showFaceVerification() async {
+  /// 拍照存檔：打開相機拍照 → 壓縮 → 返回 Base64（不進行人臉比對）
+  /// [isCheckOut] 為 true 時顯示離場拍照提示
+  /// 返回 Base64 字串，取消拍照返回 null
+  Future<String?> _captureCheckInPhoto({bool isCheckOut = false}) async {
     final picker = ImagePicker();
 
-    // 彈出驗證提示
-    if (!mounted) return false;
+    // 彈出拍照提示
+    if (!mounted) return null;
     final shouldProceed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('人臉驗證'),
-        content: const Text('打卡前需要進行人臉驗證，請準備拍照。'),
+        title: Text(isCheckOut ? '離場拍照' : '入場拍照'),
+        content: const Text('打卡前需要現場拍照存檔，供管理員抽查。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -440,82 +540,32 @@ class _AttendancePageState extends State<AttendancePage> {
         ],
       ),
     );
-    if (shouldProceed != true) return false;
+    if (shouldProceed != true) return null;
 
-    // 拍照
+    // 拍照（前置鏡頭，壓縮至 800px / q60 ≈ 40KB）
     final XFile? pickedFile = await picker.pickImage(
       source: ImageSource.camera,
       preferredCameraDevice: CameraDevice.front,
-      imageQuality: 80,
-      maxWidth: 1024,
-      maxHeight: 1024,
+      imageQuality: 60,
+      maxWidth: 800,
+      maxHeight: 800,
     );
-    if (pickedFile == null) return false;
+    if (pickedFile == null) return null;
 
     // 轉 base64
     final bytes = await pickedFile.readAsBytes();
     final base64Image = base64Encode(bytes);
 
-    // 顯示驗證中
-    if (!mounted) return false;
+    if (!mounted) return null;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('正在驗證人臉...'),
-        backgroundColor: AppTheme.primaryColor,
-        duration: Duration(seconds: 30),
+      SnackBar(
+        content: Text('照片已拍攝（${(bytes.length / 1024).toStringAsFixed(0)}KB）'),
+        backgroundColor: AppTheme.successColor,
+        duration: const Duration(seconds: 2),
       ),
     );
 
-    try {
-      final result = await ApiService().verifyFace(base64Image);
-      if (!mounted) return false;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
-      final matched = result['matched'] == true;
-      final score = result['score'] ?? 0;
-
-      if (matched) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('人臉驗證通過（匹配度：$score/100）'),
-            backgroundColor: AppTheme.successColor,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-        return true;
-      } else {
-        // 未通過，提供重試選項
-        final retry = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('人臉驗證失敗'),
-            content: Text('匹配度 $score/100，未達到 60 分的標準。\n請確保光線充足、臉部正對鏡頭。'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('取消打卡'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('重試'),
-              ),
-            ],
-          ),
-        );
-        if (retry == true) return _showFaceVerification(); // 递归重试
-        return false;
-      }
-    } catch (e) {
-      if (!mounted) return false;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('人臉驗證失敗：${e.toString().replaceAll("Exception: ", "")}'),
-          backgroundColor: AppTheme.errorColor,
-        ),
-      );
-      return false;
-    }
+    return base64Image;
   }
 
   @override
@@ -551,13 +601,17 @@ class _AttendancePageState extends State<AttendancePage> {
               _buildCheckInButton(),
               const SizedBox(height: 8),
               Text(
-                _allDone
+                _isLocked
+                    ? '帳號已被鎖定，無法打卡，請聯繫管理員'
+                    : _allDone
                     ? '今日打卡已完成，明天再來吧！'
-                    : _checkedIn
-                        ? '點擊按鈕進行離場打卡'
-                        : '點擊按鈕進行入場打卡（需開啟藍牙/定位）',
+                    : _bleScanning
+                        ? '正在掃描藍牙信標...'
+                        : _checkedIn
+                            ? '點擊按鈕進行離場打卡'
+                            : '點擊按鈕進行入場打卡（需開啟藍牙/定位）',
                 style: TextStyle(
-                  color: _allDone ? AppTheme.successColor : AppTheme.textSecondary,
+                  color: _isLocked ? AppTheme.errorColor : (_allDone ? AppTheme.successColor : AppTheme.textSecondary),
                   fontSize: 12,
                 ),
               ),
@@ -599,22 +653,27 @@ class _AttendancePageState extends State<AttendancePage> {
   Widget _buildCheckInButton() {
     final allDone = _allDone;
     final checkedIn = _checkedIn;
+    final disabled = _isLocked || allDone || _bleScanning;
 
     return Opacity(
-      opacity: allDone ? 0.6 : 1.0,
+      opacity: disabled ? 0.5 : 1.0,
       child: GestureDetector(
-        onTap: allDone ? null : _onCheckIn,
+        onTap: disabled ? null : _onCheckIn,
         child: Container(
           width: 200,
           height: 200,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: allDone
-                ? const LinearGradient(colors: [Colors.grey, Colors.grey])
-                : checkedIn
-                    ? const LinearGradient(colors: [Colors.orange, Color(0xFFE65100)])
-                    : const LinearGradient(colors: [AppTheme.primaryColor, AppTheme.primaryLight]),
-            boxShadow: allDone
+            gradient: _isLocked
+                ? LinearGradient(colors: [Colors.grey, Colors.grey.shade400])
+                : _bleScanning
+                ? const LinearGradient(colors: [Colors.blue, Colors.lightBlue])
+                : allDone
+                    ? const LinearGradient(colors: [Colors.grey, Colors.grey])
+                    : checkedIn
+                        ? const LinearGradient(colors: [Colors.orange, Color(0xFFE65100)])
+                        : const LinearGradient(colors: [AppTheme.primaryColor, AppTheme.primaryLight]),
+            boxShadow: disabled
                 ? []
                 : [
                     BoxShadow(
@@ -627,22 +686,38 @@ class _AttendancePageState extends State<AttendancePage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                allDone
-                    ? Icons.check_circle
-                    : checkedIn
-                        ? Icons.exit_to_app
-                        : Icons.fingerprint,
-                color: Colors.white,
-                size: 48,
-              ),
+              if (_bleScanning)
+                const SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 4,
+                  ),
+                )
+              else
+                Icon(
+                  _isLocked
+                      ? Icons.lock
+                      : allDone
+                      ? Icons.check_circle
+                      : checkedIn
+                          ? Icons.exit_to_app
+                          : Icons.fingerprint,
+                  color: Colors.white,
+                  size: 48,
+                ),
               const SizedBox(height: 8),
               Text(
-                allDone
-                    ? '今日打卡已完成'
-                    : checkedIn
-                        ? '離場打卡'
-                        : '入場打卡',
+                _bleScanning
+                    ? '掃描中...'
+                    : _isLocked
+                        ? '已被鎖定'
+                        : allDone
+                        ? '今日打卡已完成'
+                        : checkedIn
+                            ? '離場打卡'
+                            : '入場打卡',
                 style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
               ),
             ],
@@ -680,7 +755,7 @@ class _AttendancePageState extends State<AttendancePage> {
               const SizedBox(height: 8),
               _buildRecordRow('工作時長', hours),
               const Divider(),
-              _buildRecordRow('打卡方式', _todayRecord!['checkInType'] == 'BLUETOOTH' ? '藍牙定位 (BLE)' : 'GPS 定位'),
+              _buildRecordRow('打卡方式', _todayRecord!['checkInType'] == 'BLUETOOTH' ? '藍牙定位 (BLE)' : (_todayRecord!['checkInType'] == 'MANUAL' ? '手動打卡' : 'GPS 定位')),
               _buildRecordRow('地盤', _siteName ?? '--'),
             ],
           ],

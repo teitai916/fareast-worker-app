@@ -321,7 +321,6 @@ class _ContractorHomePageState extends State<ContractorHomePage>
   Widget _buildWorkerListItem(Map<String, dynamic> worker) {
     final name = worker['name'] ?? '未知';
     final bool lockCard = worker['cardLocked'] == true;
-    final bool blacklisted = worker['blacklisted'] == true;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -342,16 +341,6 @@ class _ContractorHomePageState extends State<ContractorHomePage>
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: const Text('锁卡', style: TextStyle(color: AppTheme.errorColor, fontSize: 10)),
-              ),
-            if (blacklisted)
-              Container(
-                margin: const EdgeInsets.only(left: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text('黑名单', style: TextStyle(color: Colors.black, fontSize: 10)),
               ),
           ],
         ),

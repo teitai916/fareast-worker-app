@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
 import 'package:fareast_worker_app/pages/auth/login_page.dart';
-import 'package:fareast_worker_app/pages/worker/face_register_page.dart';
 import 'package:fareast_worker_app/pages/worker/worker_home_page.dart';
 import 'package:fareast_worker_app/pages/contractor/contractor_home_page.dart';
 import 'package:fareast_worker_app/pages/admin/admin_home_page.dart';
@@ -39,18 +38,7 @@ class _SplashPageState extends State<SplashPage> {
       final role = user.role;
 
       if (role == 'WORKER') {
-        // 工人：检查人脸登记状态
-        try {
-          final profile = await ApiService().getWorkerProfile();
-          final faceRegistered = profile['faceRegistered'] ?? false;
-          if (!faceRegistered) {
-            _go(const FaceRegisterPage());
-          } else {
-            _go(const WorkerHomePage());
-          }
-        } catch (e) {
-          _go(const WorkerHomePage());
-        }
+        _go(const WorkerHomePage());
       } else if (role == 'CONTRACTOR') {
         _go(const ContractorHomePage());
       } else if (role == 'SITE_MANAGER' || role == 'PROJECT_MANAGER' || role == 'SUPER_ADMIN') {

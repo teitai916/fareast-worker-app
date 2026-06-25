@@ -21,8 +21,6 @@ public class WorkerRegisterRequest {
 
     private String englishName;
 
-    private String hkid;
-
     private String safetyCard;
 
     private String workerRegistrationNum;

@@ -28,12 +28,12 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
   Map<String, dynamic>? _profile;
   Map<String, dynamic>? _currentSite;
   Map<String, dynamic>? _todayAttendance; // 今日考勤
-  bool _faceRegistered = false;
   String? _workerNumber;
-  int _personalSafetyScore = 100; // 個人安全分（100分制）
   int _siteSafetyScore = 15; // 地盤安全分（15分制）
   String? _companyName; // 所屬公司名稱
   bool _checkInAllowed = true; // 必修安全影片是否全部完成
+  bool _isLocked = false; // 是否被鎖卡/黑名單
+  bool _hasPendingApplication = false; // 是否有待審核的申請
 
   @override
   void initState() {
@@ -83,12 +83,13 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
         _profile = data['profile'];
         _currentSite = data['currentSite'];
         _todayAttendance = todayAtt;
-        _faceRegistered = _profile?['faceRegistered'] ?? false;
         _workerNumber = _profile?['workerNumber'];
-        _personalSafetyScore = _profile?['safetyScore'] ?? 100;
         _siteSafetyScore = siteSafetyScore;
         _companyName = _profile?['companyName'] ?? '';
         _checkInAllowed = checkInAllowed;
+        // 檢查是否被鎖卡或黑名單：只要任一為 true 就鎖定
+        _isLocked = (_profile?['cardLocked'] == true || _profile?['blacklisted'] == true);
+        _hasPendingApplication = data['pendingApplication'] != null;
         _loading = false;
       });
     } catch (e) {
@@ -189,13 +190,14 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
 
     final siteName = _currentSite?['name'];
     final hasSite = siteName != null;
+    final hasCompany = (_profile?['currentCompanyId'] as int?) != null;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('遠東工友'),
         automaticallyImplyLeading: false,
         actions: [
-          if (!hasSite)
+          if (!hasSite && !_isLocked && !_hasPendingApplication)
             TextButton.icon(
               onPressed: () => _showApplySiteSheet(context),
               icon: const Icon(Icons.add_circle_outline, color: AppTheme.primaryColor),
@@ -235,20 +237,20 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: _isLocked ? AppTheme.errorColor.withOpacity(0.3) : Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            hasSite ? Icons.location_on : Icons.location_off,
+                            _isLocked ? Icons.lock : (hasSite ? Icons.location_on : Icons.location_off),
                             color: Colors.white, size: 16,
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            hasSite ? siteName : '暫無地盤，請申請加入',
-                            style: const TextStyle(color: Colors.white, fontSize: 13),
+                            _isLocked ? '帳號已被鎖定' : (hasSite ? siteName : '暫無地盤，請申請加入'),
+                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
                           ),
                         ],
                       ),
@@ -259,7 +261,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
               const SizedBox(height: 20),
 
               // 无地盘提示
-              if (!hasSite) ...[
+              if (!hasSite && !_isLocked && !_hasPendingApplication) ...[
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -275,20 +277,28 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('尚未加入地盤', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                            const SizedBox(height: 4),
-                            const Text('點擊左上角「申請加入」按鈕或下方按鈕，選擇要加入的地盤',
-                                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
-                            const SizedBox(height: 12),
-                            ElevatedButton.icon(
-                              onPressed: () => _showApplySiteSheet(context),
-                              icon: const Icon(Icons.add, size: 18),
-                              label: const Text('申請加入地盤'),
-                              style: ElevatedButton.styleFrom(
-                                minimumSize: Size.zero,
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              ),
+                            Text(
+                              _hasPendingApplication ? '申請審核中' : '尚未加入地盤',
+                              style: TextStyle(fontWeight: FontWeight.bold, color: _hasPendingApplication ? AppTheme.primaryColor : AppTheme.textPrimary),
                             ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _hasPendingApplication ? '您的申請正在審核中，請耐心等待判頭公司審批'
+                                  : '點擊左上角「申請加入」按鈕或下方按鈕，選擇要加入的地盤',
+                              style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                            ),
+                            if (!_hasPendingApplication) ...[
+                              const SizedBox(height: 12),
+                              ElevatedButton.icon(
+                                onPressed: () => _showApplySiteSheet(context),
+                                icon: const Icon(Icons.add, size: 18),
+                                label: const Text('申請加入地盤'),
+                                style: ElevatedButton.styleFrom(
+                                  minimumSize: Size.zero,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -301,7 +311,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
               // 快捷功能
               const Text('快捷功能', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
-              _buildQuickActionsGrid(hasSite),
+              _buildQuickActionsGrid(hasSite, hasCompany),
               const SizedBox(height: 24),
 
               // 今日考勤
@@ -474,11 +484,21 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangeSitePage())),
-                      icon: const Icon(Icons.swap_horiz, size: 20),
-                      label: const Text('更換地盤'),
-                    ),
+                    child: _isLocked
+                        ? ElevatedButton.icon(
+                            onPressed: null,
+                            icon: const Icon(Icons.lock, size: 20),
+                            label: const Text('帳號已被鎖定，無法更換地盤'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey.shade300,
+                              foregroundColor: Colors.grey.shade600,
+                            ),
+                          )
+                        : ElevatedButton.icon(
+                            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangeSitePage())),
+                            icon: const Icon(Icons.swap_horiz, size: 20),
+                            label: const Text('更換地盤'),
+                          ),
                   ),
                 ] else ...[
                   Container(
@@ -489,22 +509,33 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                     ),
                     child: Column(
                       children: [
-                        const Icon(Icons.location_off, color: AppTheme.warningColor, size: 40),
-                        const SizedBox(height: 8),
-                        const Text('您尚未加入任何地盤',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        const Text('請聯繫判頭或管理員安排地盤',
-                            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () => _showApplySiteSheet(context),
-                            icon: const Icon(Icons.add, size: 18),
-                            label: const Text('申請加入地盤'),
-                          ),
+                        Icon(
+                          _hasPendingApplication ? Icons.hourglass_empty : Icons.location_off,
+                          color: _hasPendingApplication ? AppTheme.primaryColor : AppTheme.warningColor,
+                          size: 40,
                         ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _hasPendingApplication ? '申請審核中' : '您尚未加入任何地盤',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _hasPendingApplication ? '您的申請正在審核中，請耐心等待判頭公司審批'
+                              : '請聯繫判頭或管理員安排地盤',
+                          style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                        ),
+                        if (!_hasPendingApplication) ...[
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () => _showApplySiteSheet(context),
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('申請加入地盤'),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -513,6 +544,28 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
             ),
           ),
           const SizedBox(height: 24),
+
+          // 锁定状态警告
+          if (_isLocked)
+            Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: AppTheme.errorColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.errorColor.withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.lock, color: AppTheme.errorColor, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text('帳號已被鎖定，更換地盤等功能暫不可用',
+                        style: TextStyle(color: AppTheme.errorColor, fontSize: 13)),
+                  ),
+                ],
+              ),
+            ),
 
           // 地盤安全
           const Text('地盤安全', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -583,16 +636,6 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                       Text(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
                       Text(_workerNumber ?? '', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(Icons.verified, color: _faceRegistered ? AppTheme.successColor : AppTheme.warningColor, size: 16),
-                          const SizedBox(width: 4),
-                          Text(_faceRegistered ? '已登記人臉' : '未登記人臉',
-                              style: TextStyle(fontSize: 12,
-                                  color: _faceRegistered ? AppTheme.successColor : AppTheme.warningColor)),
-                        ],
-                      ),
                     ],
                   ),
                 ),
@@ -662,16 +705,20 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
   }
 
   /// 構建快捷功能網格（固定4列，最多顯示7個+「更多」）
-  Widget _buildQuickActionsGrid(bool hasSite) {
-    final canCheckIn = hasSite && _checkInAllowed;
+  Widget _buildQuickActionsGrid(bool hasSite, bool hasCompany) {
+    // 鎖定狀態下所有功能 disabled
+    final canCheckIn = !_isLocked && hasSite && _checkInAllowed;
+    final canTrain = !_isLocked && hasSite;
+    final canChangeSite = !_isLocked && hasSite;
+    final canChangeCompany = !_isLocked && hasCompany;
     final actions = [
       _QuickActionData(Icons.fingerprint, '打卡', canCheckIn, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const AttendancePage()))),
-      _QuickActionData(Icons.smart_display, '安全培訓', true, () =>
+      _QuickActionData(Icons.smart_display, '安全培訓', canTrain, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const SafetyVideosPage()))),
-      _QuickActionData(Icons.swap_horiz, '更換地盤', hasSite, () =>
+      _QuickActionData(Icons.swap_horiz, '更換地盤', canChangeSite, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangeSitePage()))),
-      _QuickActionData(Icons.business, '更換公司', true, () =>
+      _QuickActionData(Icons.business, '更換公司', canChangeCompany, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangeCompanyPage()))),
     ];
 
@@ -752,15 +799,19 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
   /// 顯示更多功能菜單（BottomSheet）
   void _showMoreMenu() {
     final hasSite = _currentSite != null;
-    final canCheckIn = hasSite && _checkInAllowed;
+    final hasCompany = (_profile?['currentCompanyId'] as int?) != null;
+    final canCheckIn = !_isLocked && hasSite && _checkInAllowed;
+    final canTrain = !_isLocked && hasSite;
+    final canChangeSite = !_isLocked && hasSite;
+    final canChangeCompany = !_isLocked && hasCompany;
     final allActions = [
       _QuickActionData(Icons.fingerprint, '打卡', canCheckIn, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const AttendancePage()))),
-      _QuickActionData(Icons.smart_display, '安全培訓', true, () =>
+      _QuickActionData(Icons.smart_display, '安全培訓', canTrain, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const SafetyVideosPage()))),
-      _QuickActionData(Icons.swap_horiz, '更換地盤', hasSite, () =>
+      _QuickActionData(Icons.swap_horiz, '更換地盤', canChangeSite, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangeSitePage()))),
-      _QuickActionData(Icons.business, '更換公司', true, () =>
+      _QuickActionData(Icons.business, '更換公司', canChangeCompany, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangeCompanyPage()))),
     ];
 

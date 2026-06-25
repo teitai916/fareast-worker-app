@@ -65,7 +65,6 @@ public class WorkerServiceImpl implements WorkerService {
         return workerProfileRepository.findByUserId(userId).orElseGet(() -> {
             WorkerProfile profile = WorkerProfile.builder()
                     .userId(userId)
-                    .safetyScore(100)
                     .blacklisted(false)
                     .cardLocked(false)
                     .faceRegistered(false)
@@ -90,12 +89,10 @@ public class WorkerServiceImpl implements WorkerService {
                     .userId(userId)
                     .chineseName(request.getChineseName())
                     .englishName(request.getEnglishName())
-                    .hkid(request.getHkid())
                     .safetyCard(request.getSafetyCard())
                     .workerRegistrationNum(request.getWorkerRegistrationNum())
                     .dailyWage(request.getDailyWage())
                     .currentSiteId(request.getSiteId())
-                    .safetyScore(100)
                     .blacklisted(false)
                     .cardLocked(false)
                     .faceRegistered(false)
@@ -103,7 +100,6 @@ public class WorkerServiceImpl implements WorkerService {
         } else {
             if (request.getChineseName() != null) profile.setChineseName(request.getChineseName());
             if (request.getEnglishName() != null) profile.setEnglishName(request.getEnglishName());
-            if (request.getHkid() != null) profile.setHkid(request.getHkid());
             if (request.getSafetyCard() != null) profile.setSafetyCard(request.getSafetyCard());
             if (request.getWorkerRegistrationNum() != null)
                 profile.setWorkerRegistrationNum(request.getWorkerRegistrationNum());
@@ -120,104 +116,25 @@ public class WorkerServiceImpl implements WorkerService {
         return result;
     }
 
+    /*
+     * 人脸识别功能已注释（App Store 合规要求）
     @Override
     @Transactional
     public Map<String, Object> registerFace(Long userId, MultipartFile faceImage) {
-        if (faceImage == null || faceImage.isEmpty()) {
-            throw new BusinessException(400, "請上傳人臉圖片");
-        }
-
-        WorkerProfile profile = workerProfileRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException(404, "工人資料不存在"));
-
-        // Mock: return a mock face image URL
-        String imageUrl = "/uploads/faces/mock_" + userId + "_" + UUID.randomUUID() + ".jpg";
-
-        profile.setFaceImageUrl(imageUrl);
-        profile.setFaceRegistered(true);
-        workerProfileRepository.save(profile);
-
-        log.info("人臉註冊成功(模擬): userId={}, imageUrl={}", userId, imageUrl);
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("faceImageUrl", imageUrl);
-        result.put("faceRegistered", true);
-        return result;
+        // ... face registration logic ...
     }
 
     @Override
     @Transactional
     public Map<String, Object> registerFaceBase64(Long userId, String base64Image) {
-        if (base64Image == null || base64Image.isEmpty()) {
-            throw new BusinessException(400, "請上傳人臉圖片");
-        }
-
-        WorkerProfile profile = workerProfileRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException(404, "工人資料不存在"));
-
-        try {
-            // 解码 base64
-            byte[] imageBytes = Base64.getDecoder().decode(base64Image);
-
-            // 保存到 uploads/faces/ 目录
-            String facesDir = uploadDir + "/faces/";
-            Files.createDirectories(Paths.get(facesDir));
-
-            String fileName = "w" + userId + "_" + UUID.randomUUID().toString().substring(0, 8) + ".jpg";
-            Path destPath = Paths.get(facesDir + fileName);
-            Files.write(destPath, imageBytes);
-
-            String imageUrl = "/uploads/faces/" + fileName;
-
-            profile.setFaceImageUrl(imageUrl);
-            profile.setFaceRegistered(true);
-            workerProfileRepository.save(profile);
-
-            log.info("人臉註冊成功: userId={}, imageUrl={}, size={}bytes", userId, imageUrl, imageBytes.length);
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("faceImageUrl", imageUrl);
-            result.put("faceRegistered", true);
-            return result;
-
-        } catch (IOException e) {
-            log.error("人臉圖片保存失敗: userId={}, error={}", userId, e.getMessage());
-            throw new BusinessException(500, "人臉圖片保存失敗");
-        }
+        // ... face base64 registration logic ...
     }
 
     @Override
     public Map<String, Object> verifyFace(Long userId, String liveBase64) {
-        WorkerProfile profile = workerProfileRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException(404, "工人資料不存在"));
-
-        if (!Boolean.TRUE.equals(profile.getFaceRegistered()) || profile.getFaceImageUrl() == null) {
-            throw new BusinessException(400, "請先完成人臉登記");
-        }
-
-        // 获取注册图片的本地路径
-        String uploadDirPath = uploadDir;
-        String imageUrl = profile.getFaceImageUrl();
-        // imageUrl 格式: /uploads/faces/xxx.jpg → ./uploads/faces/xxx.jpg
-        String localPath = uploadDirPath + imageUrl.substring(imageUrl.indexOf("/faces"));
-
-        File regFile = new File(localPath);
-        if (!regFile.exists()) {
-            log.error("人臉註冊圖片不存在: {}", localPath);
-            throw new BusinessException(500, "人臉註冊圖片不存在，請重新登記");
-        }
-
-        // 调用 pHash 进行对比
-        int score = faceVerificationService.verify(localPath, liveBase64);
-        boolean matched = score >= verificationThreshold;
-
-        log.info("人臉驗證: userId={}, score={}, matched={}", userId, score, matched);
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("matched", matched);
-        result.put("score", score);
-        return result;
+        // ... face verification logic ...
     }
+    */
 
     @Override
     public Page<SafetyDeduction> getDeductions(Long userId, int page, int size) {

@@ -17,7 +17,7 @@ public interface AttendanceService {
      *
      * @throws com.fareast.worker.exception.BusinessException if safety videos not completed
      */
-    Attendance checkIn(Long userId, Double latitude, Double longitude, String checkInType, Long siteId);
+    Attendance checkIn(Long userId, Double latitude, Double longitude, String checkInType, Long siteId, String bluetoothBeaconId, java.util.List<java.util.Map<String, Object>> nearbyBeacons, String photoBase64);
 
     /**
      * Get paginated attendance records for a worker.

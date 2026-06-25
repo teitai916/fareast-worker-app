@@ -168,12 +168,12 @@ class _RegisterPageState extends State<RegisterPage> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('註冊成功，請先登記人臉'), backgroundColor: Colors.green),
+        const SnackBar(content: Text('註冊成功'), backgroundColor: Colors.green),
       );
       // 按角色跳轉
       if (!mounted) return;
       if (_selectedRole == 'WORKER') {
-        Navigator.pushReplacementNamed(context, '/worker/register-face');
+        Navigator.pushReplacementNamed(context, '/worker/home');
       } else {
         Navigator.pushReplacementNamed(context, '/contractor/home');
       }

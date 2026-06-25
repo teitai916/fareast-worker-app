@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
+import 'package:file_picker/file_picker.dart';
 
 class WorkerRegisterPage extends StatefulWidget {
   const WorkerRegisterPage({super.key});
@@ -15,13 +16,18 @@ class _WorkerRegisterPageState extends State<WorkerRegisterPage> {
   final _chineseNameController = TextEditingController();
   final _englishNameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _hkidController = TextEditingController();
   final _safetyCardController = TextEditingController();
   final _workerCertController = TextEditingController();
   final _api = ApiService();
 
   bool _loading = false;
   Map<String, dynamic>? _profileData;
+
+  // 上传附件状态
+  String? _safetyCardAttachmentUrl;
+  String? _safetyCardAttachmentName;
+  String? _workerRegCertAttachmentUrl;
+  String? _workerRegCertAttachmentName;
 
   @override
   void initState() {
@@ -34,7 +40,6 @@ class _WorkerRegisterPageState extends State<WorkerRegisterPage> {
     _chineseNameController.dispose();
     _englishNameController.dispose();
     _phoneController.dispose();
-    _hkidController.dispose();
     _safetyCardController.dispose();
     _workerCertController.dispose();
     super.dispose();
@@ -48,9 +53,12 @@ class _WorkerRegisterPageState extends State<WorkerRegisterPage> {
         _chineseNameController.text = data['chineseName'] ?? '';
         _englishNameController.text = data['englishName'] ?? '';
         _phoneController.text = data['phone'] ?? '';
-        _hkidController.text = data['hkId'] ?? '';
         _safetyCardController.text = data['safetyCard'] ?? '';
         _workerCertController.text = data['workerRegistrationNum'] ?? '';
+        _safetyCardAttachmentUrl = data['safetyCardAttachment'];
+        _safetyCardAttachmentName = _safetyCardAttachmentUrl != null ? '已上傳' : null;
+        _workerRegCertAttachmentUrl = data['workerRegCertAttachment'];
+        _workerRegCertAttachmentName = _workerRegCertAttachmentUrl != null ? '已上傳' : null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -60,16 +68,79 @@ class _WorkerRegisterPageState extends State<WorkerRegisterPage> {
     }
   }
 
+  Future<void> _pickAndUpload(bool isSafetyCard) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+        allowMultiple: false,
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      if (file.bytes == null) return;
+
+      setState(() => _loading = true);
+
+      final url = await _api.uploadFile(
+        bytes: file.bytes!,
+        filename: file.name,
+        folder: 'certificates',
+      );
+
+      setState(() {
+        if (isSafetyCard) {
+          _safetyCardAttachmentUrl = url;
+          _safetyCardAttachmentName = file.name;
+        } else {
+          _workerRegCertAttachmentUrl = url;
+          _workerRegCertAttachmentName = file.name;
+        }
+        _loading = false;
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${file.name} 上傳成功'), backgroundColor: AppTheme.successColor),
+      );
+    } catch (e) {
+      setState(() => _loading = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('上傳失敗：$e'), backgroundColor: AppTheme.errorColor),
+      );
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // 前端驗證：證書 4 項必填
+    final safetyCard = _safetyCardController.text.trim();
+    final workerRegNum = _workerCertController.text.trim();
+    if (safetyCard.isEmpty ||
+        _safetyCardAttachmentUrl == null || _safetyCardAttachmentUrl!.isEmpty ||
+        workerRegNum.isEmpty ||
+        _workerRegCertAttachmentUrl == null || _workerRegCertAttachmentUrl!.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('請完善平安卡及工人註冊證資料（編號+附件需全部填寫）'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+      return;
+    }
+
     setState(() => _loading = true);
     try {
       await _api.updateWorkerProfile({
         'chineseName': _chineseNameController.text.trim(),
         'englishName': _englishNameController.text.trim(),
-        'hkId': _hkidController.text.trim(),
-        'safetyCard': _safetyCardController.text.trim(),
-        'workerRegistrationNum': _workerCertController.text.trim(),
+        'safetyCard': safetyCard,
+        'safetyCardAttachment': _safetyCardAttachmentUrl,
+        'workerRegistrationNum': workerRegNum,
+        'workerRegCertAttachment': _workerRegCertAttachmentUrl,
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -135,13 +206,6 @@ class _WorkerRegisterPageState extends State<WorkerRegisterPage> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _hkidController,
-                            decoration: const InputDecoration(
-                              labelText: '香港身份證 (HKID)', border: OutlineInputBorder(),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
                           // 每日薪酬（只读）
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
@@ -182,18 +246,36 @@ class _WorkerRegisterPageState extends State<WorkerRegisterPage> {
                         children: [
                           const Text('證書資料', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 16),
+                          // 平安卡編號
                           TextFormField(
                             controller: _safetyCardController,
                             decoration: const InputDecoration(
-                              labelText: '平安卡 (綠卡)', hintText: '平安卡編號', border: OutlineInputBorder(),
+                              labelText: '平安卡 (綠卡) *', hintText: '平安卡編號', border: OutlineInputBorder(),
                             ),
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 8),
+                          // 平安卡附件上傳
+                          _buildUploadRow(
+                            label: '平安卡附件 *',
+                            fileName: _safetyCardAttachmentName,
+                            onTap: () => _pickAndUpload(true),
+                            uploaded: _safetyCardAttachmentUrl != null && _safetyCardAttachmentUrl!.isNotEmpty,
+                          ),
+                          const SizedBox(height: 16),
+                          // 工人註冊證編號
                           TextFormField(
                             controller: _workerCertController,
                             decoration: const InputDecoration(
-                              labelText: '工人註冊證 (可選)', hintText: '建造業工人註冊證編號', border: OutlineInputBorder(),
+                              labelText: '工人註冊證 *', hintText: '建造業工人註冊證編號', border: OutlineInputBorder(),
                             ),
+                          ),
+                          const SizedBox(height: 8),
+                          // 註冊證附件上傳
+                          _buildUploadRow(
+                            label: '註冊證附件 *',
+                            fileName: _workerRegCertAttachmentName,
+                            onTap: () => _pickAndUpload(false),
+                            uploaded: _workerRegCertAttachmentUrl != null && _workerRegCertAttachmentUrl!.isNotEmpty,
                           ),
                         ],
                       ),
@@ -215,6 +297,53 @@ class _WorkerRegisterPageState extends State<WorkerRegisterPage> {
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _buildUploadRow({
+    required String label,
+    String? fileName,
+    required VoidCallback onTap,
+    required bool uploaded,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        border: Border.all(color: uploaded ? AppTheme.successColor : Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              fileName ?? label,
+              style: TextStyle(
+                fontSize: 14,
+                color: uploaded ? AppTheme.successColor : AppTheme.textHint,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(
+            uploaded ? Icons.check_circle : Icons.upload_file,
+            color: uploaded ? AppTheme.successColor : AppTheme.primaryColor,
+            size: 20,
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: onTap,
+            child: Text(
+              uploaded ? '重新上傳' : '上傳',
+              style: TextStyle(
+                fontSize: 14,
+                color: AppTheme.primaryColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -149,10 +149,8 @@ public class AdminServiceImpl implements AdminService {
             throw new BusinessException(400, "扣分數值必須大於0");
         }
 
-        int newScore = Math.max(0, profile.getSafetyScore() - points);
-        profile.setSafetyScore(newScore);
-        workerProfileRepository.save(profile);
-
+        // 安全分已遷移至 worker_site_safety_scores 表（15分制）
+        // 此方法僅記錄 SafetyDeduction 扣分日誌，不再修改 worker_profiles.safety_score
         SafetyDeduction deduction = SafetyDeduction.builder()
                 .workerId(workerId)
                 .points(points)
@@ -162,7 +160,7 @@ public class AdminServiceImpl implements AdminService {
                 .build();
         safetyDeductionRepository.save(deduction);
 
-        log.info("安全評分已扣除: workerId={}, points={}, reason={}, newScore={}",
-                workerId, points, reason, newScore);
+        log.info("安全扣分已記錄: workerId={}, points={}, reason={}（安全分由地盤維度管理）",
+                workerId, points, reason);
     }
 }

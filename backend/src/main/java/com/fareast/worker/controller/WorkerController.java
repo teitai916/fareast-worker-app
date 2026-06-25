@@ -95,18 +95,34 @@ public class WorkerController {
         m.put("id", p.getId());
         m.put("userId", p.getUserId());
         m.put("workerNumber", p.getWorkerNumber());
-        m.put("faceRegistered", p.getFaceRegistered() != null && p.getFaceRegistered());
-        m.put("faceImageUrl", p.getFaceImageUrl());
-        m.put("safetyScore", p.getSafetyScore());
-        m.put("blacklisted", p.getBlacklisted() != null && p.getBlacklisted());
-        m.put("cardLocked", p.getCardLocked() != null && p.getCardLocked());
+        m.put("faceRegistered", true); // 人脸识别已移除，默认通过
+        // 安全分已移至 worker_site_safety_scores 表管理
+        m.put("safetyScore", null); // 前端不再使用此字段，使用 siteSafetyScore
+        
+        boolean isBlacklisted = p.getBlacklisted() != null && p.getBlacklisted();
+        boolean isCardLocked = p.getCardLocked() != null && p.getCardLocked();
+        
+        // 额外检查：如果地盤安全分为 0，也视为锁定（兼容历史数据）
+        boolean siteScoreZero = false;
+        if (p.getCurrentSiteId() != null) {
+            try {
+                java.util.Optional<WorkerSiteSafetyScore> scoreOpt =
+                    workerSiteSafetyScoreRepository.findByWorkerIdAndSiteId(p.getId(), p.getCurrentSiteId());
+                siteScoreZero = scoreOpt.isPresent() && scoreOpt.get().getSafetyScore() != null
+                    && scoreOpt.get().getSafetyScore() == 0;
+            } catch (Exception ignored) {}
+        }
+        
+        m.put("blacklisted", isBlacklisted || siteScoreZero);
+        m.put("cardLocked", isCardLocked || siteScoreZero);
         m.put("currentSiteId", p.getCurrentSiteId());
         m.put("currentCompanyId", p.getCurrentCompanyId());
-        m.put("hkId", p.getHkid());
         m.put("chineseName", p.getChineseName());
         m.put("englishName", p.getEnglishName());
         m.put("safetyCard", p.getSafetyCard());
+        m.put("safetyCardAttachment", p.getSafetyCardAttachment());
         m.put("workerRegistrationNum", p.getWorkerRegistrationNum());
+        m.put("workerRegCertAttachment", p.getWorkerRegCertAttachment());
         m.put("dailyWage", p.getDailyWage());
         m.put("contractAttachment", p.getContractAttachment());
         m.put("blacklistReason", p.getBlacklistReason());
@@ -137,6 +153,7 @@ public class WorkerController {
         m.put("managerPhone", s.getManagerPhone());
         m.put("latitude", s.getLatitude());
         m.put("longitude", s.getLongitude());
+        m.put("bluetoothBeaconId", s.getBluetoothBeaconId());
         return m;
     }
 
@@ -170,16 +187,30 @@ public class WorkerController {
             profile.setEnglishName(v);
             user.setEnglishName(v);
         }
-        if (body.containsKey("hkId"))
-            profile.setHkid((String) body.get("hkId"));
         if (body.containsKey("safetyCard"))
             profile.setSafetyCard((String) body.get("safetyCard"));
+        if (body.containsKey("safetyCardAttachment"))
+            profile.setSafetyCardAttachment((String) body.get("safetyCardAttachment"));
         if (body.containsKey("workerRegistrationNum"))
             profile.setWorkerRegistrationNum((String) body.get("workerRegistrationNum"));
+        if (body.containsKey("workerRegCertAttachment"))
+            profile.setWorkerRegCertAttachment((String) body.get("workerRegCertAttachment"));
         if (body.containsKey("dailyWage")) {
             Object dw = body.get("dailyWage");
             if (dw != null)
                 profile.setDailyWage(new java.math.BigDecimal(dw.toString()));
+        }
+
+        // 驗證證書資料 4 項必填（若前台傳了任何一個證書相關欄位，則全部必填）
+        boolean hasSafetyCard = profile.getSafetyCard() != null && !profile.getSafetyCard().trim().isEmpty();
+        boolean hasSafetyCardAtt = profile.getSafetyCardAttachment() != null && !profile.getSafetyCardAttachment().trim().isEmpty();
+        boolean hasRegNum = profile.getWorkerRegistrationNum() != null && !profile.getWorkerRegistrationNum().trim().isEmpty();
+        boolean hasRegAtt = profile.getWorkerRegCertAttachment() != null && !profile.getWorkerRegCertAttachment().trim().isEmpty();
+
+        // 只要填了任何一项证件资料，四项必须全部填写
+        boolean anyFilled = hasSafetyCard || hasSafetyCardAtt || hasRegNum || hasRegAtt;
+        if (anyFilled && !(hasSafetyCard && hasSafetyCardAtt && hasRegNum && hasRegAtt)) {
+            throw new BusinessException(400, "請完善平安卡及工人註冊證資料（編號+附件需全部填寫）");
         }
 
         workerProfileRepository.save(profile);
@@ -193,6 +224,8 @@ public class WorkerController {
         return ApiResponse.success(result);
     }
 
+    /*
+     * 人脸识别功能已注释（App Store 合规要求）
     @PostMapping("/face-register")
     public ApiResponse<Map<String, Object>> faceRegister(
             @AuthenticationPrincipal String userId,
@@ -200,11 +233,12 @@ public class WorkerController {
         Map<String, Object> result = workerService.registerFace(Long.valueOf(userId), faceImage);
         return ApiResponse.success(result);
     }
+    */
 
     @GetMapping("/safety-score")
     public ApiResponse<Map<String, Object>> getSafetyScore(@AuthenticationPrincipal String userId) {
-        WorkerProfile profile = workerService.getProfile(Long.valueOf(userId));
-        return ApiResponse.success(Map.of("score", profile.getSafetyScore()));
+        // 安全分已移至按地盤維度管理，返回當前地盤安全分
+        return getSiteSafetyScore(userId);
     }
 
     @GetMapping("/deductions")
@@ -340,6 +374,14 @@ public class WorkerController {
 
         WorkerProfile profile = workerService.getProfile(uid);
 
+        // 1.5 證書資料驗證（平安卡編號+附件、註冊證編號+附件，4 項必填）
+        if (profile.getSafetyCard() == null || profile.getSafetyCard().trim().isEmpty()
+                || profile.getSafetyCardAttachment() == null || profile.getSafetyCardAttachment().trim().isEmpty()
+                || profile.getWorkerRegistrationNum() == null || profile.getWorkerRegistrationNum().trim().isEmpty()
+                || profile.getWorkerRegCertAttachment() == null || profile.getWorkerRegCertAttachment().trim().isEmpty()) {
+            return ApiResponse.error("請先在個人資料完善平安卡及工人註冊證資料");
+        }
+
         // 2. 黑名单检查
         List<BlacklistRecord> blacklist = blacklistRecordRepository.findByWorkerIdAndRemovedAtIsNull(uid);
         if (blacklist != null && !blacklist.isEmpty()) {
@@ -399,6 +441,8 @@ public class WorkerController {
         return ApiResponse.success(toAppMap(application));
     }
 
+    /*
+     * 人脸识别功能已注释（App Store 合规要求）
     @PostMapping("/face-register-base64")
     public ApiResponse<Map<String, Object>> faceRegisterBase64(
             @AuthenticationPrincipal String userId,
@@ -416,6 +460,7 @@ public class WorkerController {
         Map<String, Object> result = workerService.verifyFace(Long.valueOf(userId), base64);
         return ApiResponse.success(result);
     }
+    */
 
     @GetMapping("/my-applications")
     public ApiResponse<List<Map<String, Object>>> getMyApplications(@AuthenticationPrincipal String userId) {
@@ -442,13 +487,12 @@ public class WorkerController {
 
         Map<String, Object> result = new HashMap<>();
 
-        // 如果没有当前地盘，返回个人安全分（按15分制换算）
+        // 如果没有当前地盘，返回默认15分
         if (profile.getCurrentSiteId() == null) {
-            int personalScore = (int) Math.round((profile.getSafetyScore() / 100.0) * 15);
-            result.put("safetyScore", personalScore);
+            result.put("safetyScore", 15);
             result.put("totalScore", 15);
             result.put("siteId", null);
-            result.put("message", "暂无当前地盘，显示个人安全分");
+            result.put("message", "暂无当前地盘");
             return ApiResponse.success(result);
         }
 

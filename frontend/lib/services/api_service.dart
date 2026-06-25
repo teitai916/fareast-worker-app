@@ -232,7 +232,7 @@ class ApiService {
       return {
         'profile': {
           'id': 1, 'userId': 1, 'workerNumber': 'YW20250605-001',
-          'safetyScore': 100, 'faceRegistered': true, 'cardLocked': false,
+          'faceRegistered': true, 'cardLocked': false,
           'blacklisted': false, 'currentSiteId': null,
         },
         'currentSite': null,
@@ -626,17 +626,35 @@ class ApiService {
 
   /// 入場/離場打卡
   /// 返回打卡記錄 (Map)，包含 checkInTime, checkOutTime, siteName 等
-  Future<Map<String, dynamic>> checkIn({double? latitude, double? longitude, required String checkInType, required int siteId}) async {
+  Future<Map<String, dynamic>> checkIn({
+    double? latitude,
+    double? longitude,
+    required String checkInType,
+    required int siteId,
+    String? bluetoothBeaconId,
+    List<Map<String, dynamic>>? nearbyBeacons,
+    String? photo,
+  }) async {
     if (ApiConfig.mockMode) return {};
+    final body = <String, dynamic>{
+      'latitude': latitude,
+      'longitude': longitude,
+      'checkInType': checkInType,
+      'siteId': siteId,
+    };
+    if (bluetoothBeaconId != null && bluetoothBeaconId.isNotEmpty) {
+      body['bluetoothBeaconId'] = bluetoothBeaconId;
+    }
+    if (nearbyBeacons != null && nearbyBeacons.isNotEmpty) {
+      body['nearbyBeacons'] = nearbyBeacons;
+    }
+    if (photo != null && photo.isNotEmpty) {
+      body['photo'] = photo;
+    }
     final resp = await _client.post(
       Uri.parse('$baseUrl/attendance/check-in'),
       headers: ApiConfig.headers(token: token),
-      body: jsonEncode({
-        'latitude': latitude,
-        'longitude': longitude,
-        'checkInType': checkInType,
-        'siteId': siteId,
-      }),
+      body: jsonEncode(body),
     );
     _handleError(resp);
     final data = jsonDecode(resp.body)['data'];
@@ -853,6 +871,19 @@ class ApiService {
     final resp = await _client.get(uri, headers: ApiConfig.headers(token: token));
     _handleError(resp);
     return (jsonDecode(resp.body)['data'] as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 按工人編號查詢工人資訊
+  Future<Map<String, dynamic>> getWorkerByNumber(String workerNumber) async {
+    if (ApiConfig.mockMode) return {};
+    final resp = await _client.get(
+      Uri.parse('$baseUrl/internal/workers/by-number/$workerNumber'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    final data = jsonDecode(resp.body)['data'];
+    if (data == null) throw Exception('未找到該工人');
+    return data as Map<String, dynamic>;
   }
 
   /// 獲取被鎖卡工人列表

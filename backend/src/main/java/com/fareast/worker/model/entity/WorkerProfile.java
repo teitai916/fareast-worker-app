@@ -33,9 +33,6 @@ public class WorkerProfile {
     private User user;
 
     @Column
-    private String hkid;
-
-    @Column
     private String chineseName;
 
     @Column
@@ -46,6 +43,12 @@ public class WorkerProfile {
 
     @Column
     private String workerRegistrationNum;
+
+    @Column
+    private String safetyCardAttachment;
+
+    @Column
+    private String workerRegCertAttachment;
 
     @Column(precision = 10, scale = 2)
     private BigDecimal dailyWage;
@@ -61,10 +64,6 @@ public class WorkerProfile {
 
     @Column(unique = true)
     private String workerNumber;
-
-    @Builder.Default
-    @Column(nullable = false)
-    private Integer safetyScore = 100;
 
     @Builder.Default
     @Column(nullable = false)

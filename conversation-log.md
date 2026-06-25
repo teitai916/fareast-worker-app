@@ -731,3 +731,168 @@ findByWorkerId → 有记录？→ 更新 status=true : 新增记录
 新增 `InternalAttendanceServiceImpl.formatDuration()` 辅助方法。
 </details>
 
+---
+
+## Round 44 — 2026-06-23 09:13
+
+**提问摘要**：1. app是否支持离线打卡？2. 当前代码能否满足潮汐式并发？
+
+**AI 回复要点**：
+- **离线打卡**：完全不支持。打卡6步中3步依赖网络API（人脸验证、打卡提交、记录刷新），前端无本地考勤数据库，无离线队列机制。
+- **潮汐并发**：存在多个隐患 — 重复打卡保护缺失（无UNIQUE约束+无分布式锁）、无限流机制、无异步处理、HikariCP连接池仅20、Redis空跑未被使用。
+- 给出 P0-P2 优先级改进建议。
+
+<details><summary>详细信息</summary>
+
+### 离线打卡现状
+
+| 步骤 | 依赖 | 离线能力 |
+|------|------|---------|
+| 获取地盘ID | API: getWorkerHome() | 🔴 依赖网络 |
+| BLE扫描 | 本地蓝牙 | 🟢 可离线 |
+| GPS定位 | 本地GPS | 🟢 可离线 |
+| 人脸验证 | API: verifyFace() | 🔴 依赖网络 |
+| 打卡提交 | API: checkIn() | 🔴 依赖网络 |
+| 刷新记录 | API: getDailyAttendance() | 🔴 依赖网络 |
+
+- 前端无本地考勤数据库（sqflite/Hive），仅 shared_preferences 存token
+- 无离线队列或"断网暂存、联网后同步"机制
+
+### 潮汐并发隐患
+
+| 风险等级 | 问题 | 详情 |
+|---------|------|------|
+| 🔴 严重 | 重复打卡保护缺失 | attendances表无 `UNIQUE(worker_id, date)` 约束，并发时存在Read-Check-Write竞态 |
+| 🔴 严重 | 无分布式锁 | checkIn 方法 `@Transactional` READ_COMMITTED 下两个并发请求可同时INSERT |
+| 🔴 严重 | 无限流机制 | 无Rate Limiter，高峰时所有请求涌入 |
+| 🟡 中 | HikariCP 连接池=20 | 100人同时打卡可能连接耗尽 |
+| 🟡 中 | 无异步处理 | 所有操作同步阻塞，人脸pHASH阻塞主线程 |
+| 🟡 中 | Redis空跑 | `@EnableCaching` 已配置但零处使用 |
+| 🟡 中 | 无批量打卡API | 每个工人独立HTTP调用 |
+
+### 建议优先级
+
+| 优先级 | 改进项 | 改动量 |
+|--------|--------|--------|
+| **P0** | attendances 表加 `UNIQUE(worker_id, date)` 唯一约束 | 1行SQL |
+| **P0** | HikariCP 连接池增至 50-100 | 1行配置 |
+| **P1** | Redis 缓存 Site/WorkerProfile 热点数据 | 少量代码 |
+| **P1** | 限流（令牌桶/滑动窗口） | 少量配置 |
+| P2 | 异步处理人脸验证 | 改造量较大 |
+| P2 | 离线打卡能力 | 专项改造 |
+
+</details>
+
+---
+
+## Round 45 — 2026-06-23 09:54
+
+**提问摘要**：记录到conversation-log.md，列出三项架构优化与高可用建议，待后续研究
+
+**AI 回复要点**：
+- 将分析结果追加到 conversation-log.md
+- 确认以下三项建议已记录，待后续研究后处理：
+
+<details><summary>详细信息</summary>
+
+### 建议1：动静分离（图片/文件直传对象存储）
+
+| 当前问题 | 建议方案 |
+|---------|---------|
+| 人脸照片、平安卡附件、合约附件直接通过 Spring Boot 接收并存储在本地 `uploads/` 目录 | 人脸照片/证件照直接上传至云端对象存储（OSS/COS），后端生成**预签名URL**给前端直传，不经过应用服务器 |
+| 频繁的 base64 照片传输大量占用服务器带宽 | 动静分离后：定位文字数据 → 服务器；照片/附件 → OSS/COS 直传 |
+
+**当前状态**：未实现。`FaceVerificationServiceImpl` 接收 base64 图片通过 `@RequestBody` JSON 传输。
+
+### 建议2：防重复提交（接口幂等性）
+
+| 当前问题 | 建议方案 |
+|---------|---------|
+| APP端可能因网络抖动重复发送打卡请求 | 后端在**应用层**或通过 **Redis** 实现防重机制：对同一 `(userId, date)` 的打卡请求，写入 Redis 幂等键（如 `checkin:lock:{userId}:{date}`，TTL=5分钟），并发请求只有第一个能获取锁 |
+| attendances 表缺少 `UNIQUE(worker_id, date)` 约束 | 虽然服务层可以拦截，但数据库层也应加唯一约束作为最后防线 |
+
+**当前状态**：未实现。数据库无唯一约束，服务层无 Redis 锁，存在竞态条件。
+
+### 建议3：异步处理
+
+| 当前问题 | 建议方案 |
+|---------|---------|
+| 考勤统计、生成报表、人脸比对等**非实时**操作全部同步阻塞主线程 | 引入消息队列（Kafka / RabbitMQ / Redis Stream），打卡后的统计工作异步投递到消费者处理 |
+| 高峰时段每个请求串行执行这些计算 | 异步化后：主线程快速返回打卡成功 → 消息队列缓冲异步消费 → 统计/报表后台生成 |
+
+**当前人脸比对流程**（同步）：
+```
+WorkerController.verifyFace()
+  → WorkerServiceImpl.verifyFace()
+    → registerFaceBase64()         // 从本地 face-images/ 加载注册图
+    → pHash.hash() + hammingDistance()  // CPU计算
+    → return { matched, score }
+```
+整个过程在请求线程中同步执行，高峰期所有请求排队等待。
+
+**当前状态**：未实现。无消息队列依赖，无 `@Async` 注解。
+
+</details>
+
+---
+
+## Round 46 — 2026-06-24 12:14
+
+**提问摘要**：开发内部人员扫一扫安全扣分功能
+
+**AI 回复要点**：
+- 扫码工人QR码 → 解析workerNumber → 查询工人信息 → 扣分界面 → 扣分后0分自动锁卡+黑名单
+- 后端：新增 `GET /internal/workers/by-number/{workerNumber}` 端点 + 扣分自动黑名单
+- 前端：新建 `scan_deduct_page.dart`（mobile_scanner扫码+扣分UI），替换占位符
+
+<details><summary>详细信息</summary>
+
+### 后端改动
+- `InternalController.java` — 新增 `GET /internal/workers/by-number/{workerNumber}`（调用 `findByWorkerNumber`）
+- `InternalController.java` — `toWorkerMap()` 新增 `blacklisted`
+- `InternalController.java` — `/workers/{id}/deduct` 安全分=0时自动写入 `blacklist_records` 表
+
+### 前端改动
+- `pubspec.yaml` — 新增 `mobile_scanner: ^6.0.0`
+- `scan_deduct_page.dart`（新建）— QR扫描→查API→扣分界面（数字输入+上下箭头+快捷按钮-1/-3/-5/-10）
+- `internal_home_page.dart` — `_showScanPlaceholder()` → `_openScanner()` 导航新页面
+- `api_service.dart` — 新增 `getWorkerByNumber(workerNumber)`
+- `Info.plist` — 新增 `NSCameraUsageDescription`
+
+### 扣分界面布局
+```
+工人编号/姓名/地盘/公司/现有安全分
+扣分输入 [ - 数字 + ]  -1 -3 -5 -10
+扣分原因输入
+剩余安全分（0分红色预警+确认弹窗）
+[确认扣分]
+```
+
+</details>
+
+---
+
+## Round 47 — 2026-06-24 14:15
+
+**提问摘要**：1. 安全分显示修正为地盤维度15分制（关联 worker_site_safety_scores 表）2. 扣分UI优化（去+-圈圈，改细小▲▼箭头；去快捷按钮）
+
+**AI 回复要点**：
+- **安全分修正**：后端新增强 WorkerSiteSafetyScoreRepository，getWorkerByNumber 返回 siteSafetyScore + siteSafetyTotal；扣分端点同步扣除地盤安全分
+- **UI优化**：输入框右侧放置细小 KeyboardArrowUp/Down 图标；删除所有快捷扣分按钮
+
+<details><summary>详细信息</summary>
+
+### 安全分修正（后端）
+- `InternalController.java` — 新增 `WorkerSiteSafetyScoreRepository` 注入
+- `getWorkerByNumber()` — 查询 `worker_site_safety_scores.findByWorkerIdAndSiteId()` 获取地盤安全分
+- 响应新增 `siteSafetyScore`（当前分）和 `siteSafetyTotal`（=15）
+- `/workers/{id}/deduct` — 同时扣减地盤安全分，自动锁卡/黑名单判断加入地盤分检查
+
+### 扣分UI优化（前端）
+- 去掉 `IconButton(Icons.remove_circle_outline)` 和 `add_circle_outline`
+- 改为 `TextFormField.suffixIcon` 中放两个 `GestureDetector` 包裹的微小箭头（16px）
+- 删除 `_buildQuickDeduct()` 方法和四个快捷按钮
+- 安全分显示改为 `現有安全分: X / 15 分`、`剩餘安全分: X / 15`
+
+</details>
+

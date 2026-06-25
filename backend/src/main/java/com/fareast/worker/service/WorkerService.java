@@ -20,23 +20,12 @@ public interface WorkerService {
      */
     Map<String, Object> registerWorker(WorkerRegisterRequest request);
 
-    /**
-     * Register/upload a face image for the worker.
-     */
+    /*
+     * 人脸识别功能已注释（App Store 合规要求）
     Map<String, Object> registerFace(Long userId, MultipartFile faceImage);
-
-    /**
-     * Register face using base64 encoded image (for web/mobile).
-     */
     Map<String, Object> registerFaceBase64(Long userId, String base64Image);
-
-    /**
-     * 验证打卡时拍摄的人脸图片是否与注册时一致
-     * @param userId 用户 ID
-     * @param liveBase64 打卡时拍摄的 base64 图片
-     * @return {matched: bool, score: int}
-     */
     Map<String, Object> verifyFace(Long userId, String liveBase64);
+    */
 
     /**
      * Get paginated deduction records for a worker.

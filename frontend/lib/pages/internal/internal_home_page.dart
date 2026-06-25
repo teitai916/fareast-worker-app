@@ -5,6 +5,7 @@ import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
 import 'package:fareast_worker_app/pages/worker/safety_videos_page.dart';
 import 'package:fareast_worker_app/pages/notifications_page.dart';
+import 'package:fareast_worker_app/pages/internal/scan_deduct_page.dart';
 import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -282,23 +283,17 @@ class _InternalHomePageState extends State<InternalHomePage> {
       ],
     ).then((value) {
       if (value == 'scan') {
-        _showScanPlaceholder();
+        _openScanner();
       } else if (value == 'blacklist') {
         _showBlacklistDialog();
       }
     });
   }
 
-  void _showScanPlaceholder() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [Icon(Icons.qr_code_scanner, color: AppTheme.primaryColor), SizedBox(width: 8), Text('掃一掃')],
-        ),
-        content: const Text('掃碼功能即將上線，敬請期待。\n\n上線後可掃描工人二維碼快速進行安全扣分。'),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('關閉'))],
-      ),
+  void _openScanner() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ScanDeductPage()),
     );
   }
 

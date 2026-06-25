@@ -57,6 +57,9 @@ public class InternalController {
     @Autowired
     private BlacklistRecordRepository blacklistRecordRepository;
 
+    @Autowired
+    private WorkerSiteSafetyScoreRepository workerSiteSafetyScoreRepository;
+
     // ==================== Home ====================
 
     /**
@@ -405,6 +408,32 @@ public class InternalController {
         return ApiResponse.success(result);
     }
 
+    // ==================== Worker Lookup by Number ====================
+
+    @GetMapping("/workers/by-number/{workerNumber}")
+    public ApiResponse<Map<String, Object>> getWorkerByNumber(@PathVariable String workerNumber) {
+        WorkerProfile profile = workerProfileRepository.findByWorkerNumber(workerNumber)
+                .orElseThrow(() -> new BusinessException(404, "未找到該工人編號: " + workerNumber));
+        Map<String, Object> result = toWorkerMap(profile);
+
+        // 查詢地盤維度安全分（15分制，來自 worker_site_safety_scores）
+        Long siteId = profile.getCurrentSiteId();
+        if (siteId != null) {
+            java.util.Optional<WorkerSiteSafetyScore> siteScoreOpt =
+                    workerSiteSafetyScoreRepository.findByWorkerIdAndSiteId(profile.getId(), siteId);
+            if (siteScoreOpt.isPresent()) {
+                result.put("siteSafetyScore", siteScoreOpt.get().getSafetyScore());
+            } else {
+                result.put("siteSafetyScore", 15);
+            }
+        } else {
+            result.put("siteSafetyScore", 15);
+        }
+        result.put("siteSafetyTotal", 15);
+
+        return ApiResponse.success(result);
+    }
+
     // ==================== Deduct & Lock (existing) ====================
 
     @PostMapping("/workers/{id}/deduct")
@@ -414,22 +443,86 @@ public class InternalController {
             @RequestBody Map<String, Object> body) {
         Integer points = Integer.valueOf(body.get("points").toString());
         String reason = (String) body.getOrDefault("reason", "");
+        
+        // 记录扣分日志（仅记录，不再扣 personal 100分制）
         adminService.deductScore(id, points, reason, Long.valueOf(userId));
 
         WorkerProfile profile = workerProfileRepository.findById(id).orElse(null);
+
+        // 同時扣除地盤維度安全分（worker_site_safety_scores, 15分制）
+        if (profile != null && profile.getCurrentSiteId() != null) {
+            java.util.Optional<WorkerSiteSafetyScore> siteScoreOpt =
+                    workerSiteSafetyScoreRepository.findByWorkerIdAndSiteId(id, profile.getCurrentSiteId());
+            WorkerSiteSafetyScore siteScore;
+            if (siteScoreOpt.isPresent()) {
+                siteScore = siteScoreOpt.get();
+                int newSiteScore = Math.max(0, siteScore.getSafetyScore() - points);
+                siteScore.setSafetyScore(newSiteScore);
+            } else {
+                siteScore = WorkerSiteSafetyScore.builder()
+                        .workerId(id)
+                        .siteId(profile.getCurrentSiteId())
+                        .safetyScore(Math.max(0, 15 - points))
+                        .build();
+            }
+            workerSiteSafetyScoreRepository.save(siteScore);
+            log.info("地盤安全分已扣减: workerId={}, siteId={}, deducted={}, newScore={}",
+                    id, profile.getCurrentSiteId(), points, siteScore.getSafetyScore());
+        }
+
+        // 檢查是否需要自動鎖卡和加入黑名單（只檢查地盤安全分為 0）
+        boolean scoreIsZero = false;
+        if (profile != null && profile.getCurrentSiteId() != null) {
+            java.util.Optional<WorkerSiteSafetyScore> siteScoreOpt2 =
+                    workerSiteSafetyScoreRepository.findByWorkerIdAndSiteId(id, profile.getCurrentSiteId());
+            if (siteScoreOpt2.isPresent() && siteScoreOpt2.get().getSafetyScore() != null
+                    && siteScoreOpt2.get().getSafetyScore() == 0) {
+                scoreIsZero = true;
+            }
+        }
         boolean autoLocked = false;
-        if (profile != null && profile.getSafetyScore() != null && profile.getSafetyScore() == 0
+        boolean autoBlacklisted = false;
+        if (profile != null && scoreIsZero
                 && !Boolean.TRUE.equals(profile.getCardLocked())) {
             profile.setCardLocked(true);
             workerProfileRepository.save(profile);
             autoLocked = true;
             log.info("安全分為0，自動鎖卡: workerId={}", id);
         }
+        // 安全分為0，自動加入黑名單
+        if (profile != null && scoreIsZero
+                && !Boolean.TRUE.equals(profile.getBlacklisted())) {
+            profile.setBlacklisted(true);
+            profile.setBlacklistReason(reason);
+            workerProfileRepository.save(profile);
+            // 同步寫入 blacklist_records
+            BlacklistRecord record = BlacklistRecord.builder()
+                    .workerId(profile.getId())
+                    .name(profile.getChineseName())
+                    .workerRegistrationNum(profile.getWorkerRegistrationNum())
+                    .companyId(profile.getCurrentCompanyId())
+                    .status(true)
+                    .reason(reason)
+                    .build();
+            blacklistRecordRepository.save(record);
+            autoBlacklisted = true;
+            log.info("安全分為0，自動加入黑名單: workerId={}", id);
+        }
 
         Map<String, Object> result = new HashMap<>();
-        result.put("safetyScore", profile != null ? profile.getSafetyScore() : 0);
+        // 返回地盤安全分（15分制）
+        if (profile != null && profile.getCurrentSiteId() != null) {
+            java.util.Optional<WorkerSiteSafetyScore> siteScoreOpt3 =
+                    workerSiteSafetyScoreRepository.findByWorkerIdAndSiteId(id, profile.getCurrentSiteId());
+            result.put("safetyScore", siteScoreOpt3.map(WorkerSiteSafetyScore::getSafetyScore).orElse(15));
+        } else {
+            result.put("safetyScore", 15);
+        }
         result.put("cardLocked", profile != null ? profile.getCardLocked() : false);
         result.put("autoLocked", autoLocked);
+        result.put("autoBlacklisted", autoBlacklisted);
+
+        // 保存重複的 siteScore 返回部分，已在上面合併
         return ApiResponse.success(result);
     }
 
@@ -581,8 +674,9 @@ public class InternalController {
         }
         m.put("chineseName", workerName);
         m.put("englishName", w.getEnglishName());
-        m.put("safetyScore", w.getSafetyScore());
+        m.put("safetyScore", 0); // 已廢棄，安全分在地盤維度管理
         m.put("cardLocked", w.getCardLocked());
+        m.put("blacklisted", w.getBlacklisted());
         m.put("currentSiteId", w.getCurrentSiteId());
         m.put("currentCompanyId", w.getCurrentCompanyId());
 

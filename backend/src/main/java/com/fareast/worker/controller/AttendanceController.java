@@ -42,8 +42,12 @@ public class AttendanceController {
         Double longitude = requestBody.get("longitude") != null ? Double.valueOf(requestBody.get("longitude").toString()) : null;
         String checkInType = (String) requestBody.get("checkInType");
         Long siteId = requestBody.get("siteId") != null ? Long.valueOf(requestBody.get("siteId").toString()) : null;
+        String bluetoothBeaconId = (String) requestBody.get("bluetoothBeaconId");
+        @SuppressWarnings("unchecked")
+        java.util.List<java.util.Map<String, Object>> nearbyBeacons = (java.util.List<java.util.Map<String, Object>>) requestBody.get("nearbyBeacons");
+        String photoBase64 = (String) requestBody.get("photo");
 
-        Attendance attendance = attendanceService.checkIn(Long.valueOf(userId), latitude, longitude, checkInType, siteId);
+        Attendance attendance = attendanceService.checkIn(Long.valueOf(userId), latitude, longitude, checkInType, siteId, bluetoothBeaconId, nearbyBeacons, photoBase64);
 
         // Build response map (include site name)
         Map<String, Object> data = new HashMap<>();
@@ -55,6 +59,9 @@ public class AttendanceController {
         data.put("latitude", attendance.getLatitude());
         data.put("longitude", attendance.getLongitude());
         data.put("locationAddress", attendance.getLocationAddress());
+        data.put("bluetoothBeaconId", attendance.getBluetoothBeaconId());
+        data.put("checkInPhotoUrl", attendance.getCheckInPhotoUrl());
+        data.put("checkOutPhotoUrl", attendance.getCheckOutPhotoUrl());
 
         // Get site name
         if (attendance.getSiteId() != null) {

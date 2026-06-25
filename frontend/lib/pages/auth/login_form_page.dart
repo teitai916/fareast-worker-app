@@ -43,19 +43,8 @@ class _LoginFormPageState extends State<LoginFormPage> {
         // 內部工作人員
         route = '/internal/home';
       } else {
-        // 工人：檢查人臉是否已登記
-        try {
-          final profile = await _api.getWorkerProfile();
-          final faceRegistered = profile['faceRegistered'] ?? false;
-          if (!faceRegistered) {
-            route = '/worker/register-face';
-          } else {
-            route = '/worker/home';
-          }
-        } catch (e) {
-          // 獲取檔案失敗，預設進入工人首頁
-          route = '/worker/home';
-        }
+        // 工人：直接進入工人首頁
+        route = '/worker/home';
       }
       Navigator.pushReplacementNamed(context, route);
     } catch (e) {

@@ -41,6 +41,7 @@ dependencies:
 
   # QR Code
   qr_flutter: ^4.1.0
+  mobile_scanner: ^6.0.0
 
   # Web content display
   webview_flutter: ^4.10.0

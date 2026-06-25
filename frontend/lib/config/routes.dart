@@ -5,7 +5,6 @@ import 'package:fareast_worker_app/pages/auth/register_page.dart';
 import 'package:fareast_worker_app/pages/auth/forgot_password_page.dart';
 import 'package:fareast_worker_app/pages/worker/worker_home_page.dart';
 import 'package:fareast_worker_app/pages/worker/worker_register_page.dart';
-import 'package:fareast_worker_app/pages/worker/face_register_page.dart';
 import 'package:fareast_worker_app/pages/worker/safety_videos_page.dart';
 import 'package:fareast_worker_app/pages/worker/attendance_page.dart';
 import 'package:fareast_worker_app/pages/worker/change_site_page.dart';
@@ -34,8 +33,6 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const WorkerHomePage());
       case '/worker/register':
         return MaterialPageRoute(builder: (_) => const WorkerRegisterPage());
-      case '/worker/register-face':
-        return MaterialPageRoute(builder: (_) => const FaceRegisterPage());
       case '/worker/safety-videos':
         return MaterialPageRoute(builder: (_) => const SafetyVideosPage());
       case '/worker/attendance':

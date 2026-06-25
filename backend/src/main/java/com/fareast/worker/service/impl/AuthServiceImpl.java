@@ -104,7 +104,6 @@ public class AuthServiceImpl implements AuthService {
             WorkerProfile profile = WorkerProfile.builder()
                     .userId(user.getId())
                     .workerNumber(workerNumber)
-                    .safetyScore(100)
                     .blacklisted(false)
                     .cardLocked(false)
                     .faceRegistered(false)
