@@ -1,10 +1,16 @@
 /// 远东工友App - API配置
 class ApiConfig {
-  // 修改为实际服务器地址
-  static const String baseUrl = 'http://10.106.0.242:8080/api/v1';
+  /// 从 --dart-define=API_BASE_URL=xxx 读取，默认使用测试环境
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://10.106.0.242:8080/api/v1',
+  );
 
-  // 开发环境 (局域网)
+  // 测试环境 (局域网)
   static const String baseUrlDev = 'http://10.106.0.242:8080/api/v1';
+
+  // 生产环境
+  static const String baseUrlProd = 'https://fsapp.fefacade.com/api/v1';
 
   // API超时配置
   static const int connectTimeout = 15000;

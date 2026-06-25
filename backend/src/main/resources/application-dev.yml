@@ -1,0 +1,66 @@
+# =============================================
+# 开发环境配置（含开发密钥）
+# =============================================
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/fareast_worker?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Hong_Kong
+    username: postgres
+    password: dW@20251101
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      connection-timeout: 20000
+
+  redis:
+    host: localhost
+    port: 6379
+    password:
+    timeout: 5000
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+
+  # 开发环境允许 JPA 自动更新表结构，禁用 Flyway 校验
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  flyway:
+    enabled: false
+
+# JWT 密钥（开发）
+jwt:
+  secret: YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY3ODkwYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0
+  expiration: 7776000000   # 90天
+  refresh-expiration: 2592000000   # 30天
+
+# 短信配置（开发）
+sms:
+  provider: aliyun
+  access-key-id: your-aliyun-access-key
+  access-key-secret: your-aliyun-secret
+  sign-name: 远东工友
+  template-code: SMS_335260681
+
+# 人脸识别（已废弃，仅保留占位）
+face:
+  provider: baidu
+  app-id: your-baidu-app-id
+  api-key: your-baidu-api-key
+  secret-key: your-baidu-secret-key
+  verification-threshold: 65
+
+# 飞书配置（开发）
+feishu:
+  app-id: cli_aaa88b348aba9cfe
+  app-secret: aUZPEJ59h58cHHQVwvN1Ge2cXE4qdWgS
+
+logging:
+  level:
+    com.fareast.worker: DEBUG

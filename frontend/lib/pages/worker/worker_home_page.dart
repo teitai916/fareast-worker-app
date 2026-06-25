@@ -203,6 +203,11 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
               icon: const Icon(Icons.add_circle_outline, color: AppTheme.primaryColor),
               label: const Text('申請加入', style: TextStyle(color: AppTheme.primaryColor)),
             ),
+          IconButton(
+            onPressed: _workerNumber != null ? () => _showQrCodeDialog() : null,
+            icon: const Icon(Icons.qr_code, size: 24),
+            tooltip: '工人編碼二維碼',
+          ),
         ],
       ),
       body: RefreshIndicator(
@@ -413,12 +418,6 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                       ],
                     ),
                   ),
-                ),
-                // 二维码图标
-                IconButton(
-                  onPressed: _workerNumber != null ? () => _showQrCodeDialog() : null,
-                  icon: Icon(Icons.qr_code, color: AppTheme.textHint, size: 28),
-                  tooltip: '查看工人編碼二維碼',
                 ),
               ],
             ],
