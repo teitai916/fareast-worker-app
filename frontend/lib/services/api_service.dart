@@ -162,13 +162,10 @@ class ApiService {
         {'id': 3, 'name': '建輝工程有限公司', 'contactPerson': '王經理'},
       ];
     }
-    final token = TokenManager.token;
-    if (token == null || token.isEmpty) {
-      throw Exception('未登入：token 為空，請重新登入');
-    }
+    // 此接口已改为公开，不加 token 也能访问（用于注册时选择公司）
     final resp = await _client.get(
       Uri.parse('$baseUrl/company/contractor-list'),
-      headers: ApiConfig.headers(token: token),
+      headers: {'Content-Type': 'application/json'},
     );
     _handleError(resp);
     return jsonDecode(resp.body)['data'] as List<dynamic>;
@@ -629,6 +626,40 @@ class ApiService {
     }
   }
 
+  /// 获取天气警告（台风/暴雨/酷热/工作暑热）
+  Future<Map<String, dynamic>> getWeatherWarnings() async {
+    if (ApiConfig.mockMode) return {'warnsum': '{}', 'hsww': '{}'};
+    try {
+      final resp = await _client.get(
+        Uri.parse('$baseUrl/worker/weather-warnings'),
+        headers: ApiConfig.headers(token: token),
+      );
+      _handleError(resp);
+      final data = jsonDecode(resp.body)['data'];
+      if (data == null) return {'warnsum': '{}', 'hsww': '{}'};
+      return data as Map<String, dynamic>;
+    } catch (_) {
+      return {'warnsum': '{}', 'hsww': '{}'};
+    }
+  }
+
+  /// 获取天气警告（内部人员专用）
+  Future<Map<String, dynamic>> getInternalWeatherWarnings() async {
+    if (ApiConfig.mockMode) return {'warnsum': '{}', 'hsww': '{}'};
+    try {
+      final resp = await _client.get(
+        Uri.parse('$baseUrl/internal/weather-warnings'),
+        headers: ApiConfig.headers(token: token),
+      );
+      _handleError(resp);
+      final data = jsonDecode(resp.body)['data'];
+      if (data == null) return {'warnsum': '{}', 'hsww': '{}'};
+      return data as Map<String, dynamic>;
+    } catch (_) {
+      return {'warnsum': '{}', 'hsww': '{}'};
+    }
+  }
+
   // ===== Attendance APIs =====
 
   /// 入場/離場打卡
@@ -821,8 +852,13 @@ class ApiService {
       try {
         final body = jsonDecode(resp.body);
         throw Exception(body['message'] ?? body['msg'] ?? '請求失敗');
-      } catch (_) {
-        throw Exception('請求失敗 (${resp.statusCode})');
+      } catch (e) {
+        // jsonDecode 失败（如非 JSON）→ 用 HTTP 状态码兜底；已抛出的业务异常 → 继续传播
+        if (e is FormatException) {
+          throw Exception('請求失敗 (${resp.statusCode})');
+        } else {
+          rethrow;
+        }
       }
     }
     // 後端異常處理器可能返回 HTTP 200 但 body 中 code >= 400
@@ -832,8 +868,13 @@ class ApiService {
       if (code != null && code is int && code >= 400) {
         throw Exception(body['message'] ?? body['msg'] ?? '請求失敗 (code: $code)');
       }
-    } catch (_) {
-      // jsonDecode 失敗或已拋出異常，不再處理
+    } catch (e) {
+      // jsonDecode 失败（如非 JSON 响应）→ 静默；主动抛出的异常 → 继续传播
+      if (e is FormatException) {
+        // 非 JSON 响应，忽略
+      } else {
+        rethrow;
+      }
     }
   }
 
