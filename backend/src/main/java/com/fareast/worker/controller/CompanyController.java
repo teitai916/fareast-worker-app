@@ -56,6 +56,7 @@ public class CompanyController {
      * 获取所有判头公司列表（工人申请地盘时选择所属公司用）
      */
     @GetMapping("/contractor-list")
+    @PreAuthorize("permitAll()")
     public ApiResponse<List<Map<String, Object>>> getContractorList() {
         List<Company> companies = companyRepository.findAll().stream()
                 .filter(c -> c.getType() == CompanyType.CONTRACTOR)

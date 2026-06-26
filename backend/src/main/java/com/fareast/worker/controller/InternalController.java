@@ -9,6 +9,7 @@ import com.fareast.worker.repository.*;
 import com.fareast.worker.service.AdminService;
 import com.fareast.worker.service.InternalAttendanceService;
 import com.fareast.worker.service.NotificationService;
+import com.fareast.worker.service.WeatherWarningService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -59,6 +60,9 @@ public class InternalController {
 
     @Autowired
     private WorkerSiteSafetyScoreRepository workerSiteSafetyScoreRepository;
+
+    @Autowired
+    private WeatherWarningService weatherWarningService;
 
     // ==================== Home ====================
 
@@ -761,5 +765,17 @@ public class InternalController {
         Long uid = Long.valueOf(userId);
         java.util.List<Integer> days = internalAttendanceService.getMonthlyDays(uid, year, month);
         return ApiResponse.success(days);
+    }
+
+    /**
+     * GET /internal/weather-warnings
+     * 获取当前生效的天气警告（台风/暴雨/酷热/工作暑热）
+     */
+    @GetMapping("/weather-warnings")
+    public ApiResponse<Map<String, Object>> getWeatherWarnings() {
+        Map<String, Object> result = new HashMap<>();
+        result.put("warnsum", weatherWarningService.getWarnsum());
+        result.put("hsww", weatherWarningService.getHsww());
+        return ApiResponse.success(result);
     }
 }

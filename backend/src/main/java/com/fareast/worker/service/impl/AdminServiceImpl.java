@@ -78,6 +78,7 @@ public class AdminServiceImpl implements AdminService {
                 .reason(reason)
                 .addedBy(adminId)
                 .addedAt(LocalDateTime.now())
+                .status(true)
                 .build();
         BlacklistRecord saved = blacklistRecordRepository.save(record);
 
@@ -99,6 +100,7 @@ public class AdminServiceImpl implements AdminService {
         workerProfileRepository.save(profile);
 
         record.setRemovedAt(LocalDateTime.now());
+        record.setStatus(false);
         blacklistRecordRepository.save(record);
 
         log.info("工人已從黑名單移除: workerId={}, recordId={}", record.getWorkerId(), recordId);

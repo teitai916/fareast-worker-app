@@ -896,3 +896,125 @@ WorkerController.verifyFace()
 
 </details>
 
+---
+
+## Round 48 — 2026-06-25 15:00
+
+**提问摘要**：开发天气警告提示栏（台风/暴雨/工作暑热警告），连接香港天文台开放数据 API
+
+**AI 回复要点**：
+- 两个数据源：`weather.php?dataType=warnsum`（台风/暴雨等）和 `hsww.php`（工作暑热警告）
+- 后端 20 分钟定时轮询 → Redis 缓存（TTL=20分钟）
+- 前端警告栏在工人首页 + 内部人员首页用户卡片**上方**展示
+- 优先级显示：台风 > 暴雨 > 酷热警告，仅显示最高优先级，其余收缩可展开，无关闭按钮
+
+<details><summary>详细信息</summary>
+
+### 数据源
+
+#### 1. 天气警告一览（warnsum）
+```
+GET https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc
+```
+实测响应：
+```json
+{
+  "WHOT": {"name":"酷熱天氣警告","code":"WHOT","actionCode":"REISSUE",
+           "issueTime":"2026-06-21T06:45:00+08:00","updateTime":"2026-06-25T06:45:00+08:00"},
+  "WTS":  {"name":"雷暴警告","code":"WTS","actionCode":"EXTEND",
+           "issueTime":"2026-06-25T10:40:00+08:00","expireTime":"2026-06-25T17:30:00+08:00"}
+}
+```
+
+工地相关警告码及优先级、颜色：
+
+| 优先级 | 代码 | 说明 | 颜色 |
+|--------|------|------|------|
+| **1** | `WTCSGNL` | 熱帶氣旋警告信號（1/3/8/9/10號） | 1号=黄, 3号=橙, **8号+=黑** |
+| **2** | `WRAIN` / `WRAINR` / `WRAINB` | 黃/紅/黑色暴雨警告 | 黄=黄, 红=橙, **黑=黑** |
+| **3** | `WHOT` | 酷熱天氣警告 | 橙色 |
+| **4** | `WTS` | 雷暴警告 | 蓝色 |
+| **5** | `WL` | 山泥傾瀉警告 | 蓝色 |
+| **5** | `WFNTSA` | 水浸特別報告 | 蓝色 |
+
+#### 2. 工作暑熱警告（HSWW）
+```
+GET https://data.weather.gov.hk/weatherAPI/opendata/hsww.php?lang=tc
+```
+实测响应（仅生效中或取消后60分钟内返回）：
+```json
+{
+  "hsww": {
+    "desc": "勞工處提醒你：黃色工作暑熱警告在今日下午2時40分仍然生效...",
+    "warningLevel": "AMBER",         // AMBER/RED/BLACK
+    "actionCode": "ISSUE",           // ISSUE/UPDATE/CANCEL
+    "effectiveTime": "2026-06-25T14:40:00+08:00",
+    "issueTime": "2026-06-25T14:35:00+08:00"
+  }
+}
+```
+HSWW 颜色：AMBER=橙色, RED=红色, **BLACK=黑色**
+
+### 后端实现
+
+| 组件 | 说明 |
+|------|------|
+| **`WeatherWarningService.java`**（新建） | `@EnableScheduling` + `@Scheduled(fixedDelay=1200000)` 每 20 分钟调用两个天文台 API；合并结果写入 Redis（key=`weather:warnings`、`weather:hsww`），TTL=25 分钟 |
+| **降级策略** | API 调用失败时使用 Redis 缓存的上一次数据；Redis 不可用或首次启动时返回空 |
+| **`GET /worker/weather-warnings`**（新建） | 从 Redis 读取并返回：`{ hsww: {...}, warnings: [{code,name,actionCode,issueTime,level,color}] }` |
+| **`GET /internal/weather-warnings`**（新建） | 同上，供内部人员使用 |
+
+### 前端实现
+
+#### 警告栏位置
+- 工人首頁：**用户信息卡片上方**
+- 內部人員首頁：**用户信息卡片上方**
+
+#### 展示逻辑
+
+```
+默认（仅显示最高优先级）：
+┌──────────────────────────────────┐
+│  🌀 三號強風信號 現正生效          │  ← 最高优先级
+│                [展開 2 個警告 ∨]  │  ← 点击展开
+└──────────────────────────────────┘
+
+展开状态：
+┌──────────────────────────────────┐
+│  🌀 三號強風信號 現正生效          │
+│  🌧 黃色暴雨警告信號 現正生效      │
+│  ☀ 酷熱天氣警告 現正生效          │
+│                [收起 ∧]          │
+└──────────────────────────────────┘
+```
+- **始终显示**，无关闭按钮（用户不可关闭安全警告）
+- 多条警告时默认展示最高优先级，下方显示 "展开 N 个警告" 按钮
+- 点击展开显示全部警告，可收起
+
+#### 颜色规则
+
+| 条件 | 文字色 | 背景色 |
+|------|--------|--------|
+| 暑熱黑色 / 暴雨黑色 / 8號+風球 | 白色 | **#333333**（黑色） |
+| 暑熱紅色 / 暴雨紅色 / 3號風球 | #BF360C | #FFF3E0（橙色调） |
+| 暑熱黃色 / 暴雨黃色 / 1號風球 | #E65100 | #FFF8E1（黄色调） |
+| 雷暴 / 酷熱 / 山泥傾瀉 / 水浸 | #0D47A1 | #E3F2FD（蓝色调） |
+
+#### 新增/修改文件
+
+| 文件 | 操作 |
+|------|------|
+| `WeatherWarningService.java` | **新建**：定时拉取+Redis缓存+合并 |
+| `WorkerController.java` | **修改**：新增 `GET /worker/weather-warnings` |
+| `InternalController.java` | **修改**：新增 `GET /internal/weather-warnings` |
+| `weather_warning_bar.dart` | **新建**：警告栏 Flutter 组件 |
+| `worker_home_page.dart` | **修改**：用户卡片上方集成警告栏 |
+| `internal_home_page.dart` | **修改**：用户卡片上方集成警告栏 |
+| `api_service.dart` | **修改**：新增 `getWeatherWarnings()` + `getInternalWeatherWarnings()` |
+
+> **修正**：TTL = 20分钟（与轮询间隔一致）
+> 
+> **已实施完成**（2026-06-25）。WeatherWarningBar 组件通过 `isInternal` 参数区分工人/内部人员 API 端点。
+
+</details>
+

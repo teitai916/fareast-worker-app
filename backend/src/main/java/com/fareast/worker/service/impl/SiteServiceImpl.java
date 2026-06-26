@@ -6,9 +6,11 @@ import com.fareast.worker.model.entity.Site;
 import com.fareast.worker.model.entity.SiteChangeRequest;
 import com.fareast.worker.model.entity.User;
 import com.fareast.worker.model.entity.WorkerProfile;
+import com.fareast.worker.model.entity.BlacklistRecord;
 import com.fareast.worker.model.entity.WorkerSiteSafetyScore;
 import com.fareast.worker.model.enums.AuditStatus;
 import com.fareast.worker.model.enums.UserRole;
+import com.fareast.worker.repository.BlacklistRecordRepository;
 import com.fareast.worker.repository.SiteChangeRequestRepository;
 import com.fareast.worker.repository.SiteRepository;
 import com.fareast.worker.repository.UserRepository;
@@ -52,6 +54,9 @@ public class SiteServiceImpl implements SiteService {
     @Autowired
     private SafetyService safetyService;
 
+    @Autowired
+    private BlacklistRecordRepository blacklistRecordRepository;
+
     @Override
     public java.util.List<Site> getAllSites() {
         return siteRepository.findAll();
@@ -82,6 +87,12 @@ public class SiteServiceImpl implements SiteService {
                                  java.math.BigDecimal dailyWage, String contractAttachment) {
         WorkerProfile profile = workerProfileRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException(404, "工人資料不存在"));
+
+        // 黑名单交叉比對（姓名/注册证号跨工人匹配）
+        String crossMsg = checkBlacklistCross(profile);
+        if (crossMsg != null) {
+            throw new BusinessException(400, crossMsg);
+        }
 
         Site targetSite = siteRepository.findById(targetSiteId)
                 .orElseThrow(() -> new BusinessException(404, "目標地盤不存在"));
@@ -289,5 +300,36 @@ public class SiteServiceImpl implements SiteService {
                     workerId, siteId, e.getMessage());
             // 初始化失敗不影響主流程
         }
+    }
+
+    /**
+     * 黑名单交叉比對：按姓名和工人注册证号跨工人比对 blacklist_records
+     * 任一匹配（且 removed_at IS NULL）则返回错误提示，null 表示通过
+     */
+    private String checkBlacklistCross(WorkerProfile profile) {
+        // 1. 姓名比对（优先取 WorkerProfile.chineseName，其次 User.name）
+        String name = profile.getChineseName();
+        if (name == null || name.trim().isEmpty()) {
+            User user = userRepository.findById(profile.getUserId()).orElse(null);
+            if (user != null) name = user.getName();
+        }
+        if (name != null && !name.trim().isEmpty()) {
+            List<BlacklistRecord> byName = blacklistRecordRepository.findByNameAndStatusTrue(name.trim());
+            if (byName != null && !byName.isEmpty()) {
+                return "您的申請不批准，請聯絡所屬公司判頭";
+            }
+        }
+
+        // 2. 工人注册证号比对
+        String regNum = profile.getWorkerRegistrationNum();
+        if (regNum != null && !regNum.trim().isEmpty()) {
+            List<BlacklistRecord> byReg = blacklistRecordRepository
+                    .findByWorkerRegistrationNumAndStatusTrue(regNum.trim());
+            if (byReg != null && !byReg.isEmpty()) {
+                return "您的申請不批准，請聯絡所屬公司判頭";
+            }
+        }
+
+        return null; // 校验通过
     }
 }

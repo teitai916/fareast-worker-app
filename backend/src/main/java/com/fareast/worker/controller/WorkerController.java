@@ -33,6 +33,7 @@ import com.fareast.worker.repository.WorkerSiteSafetyScoreRepository;
 import com.fareast.worker.service.NotificationService;
 import com.fareast.worker.service.SiteService;
 import com.fareast.worker.service.WorkerService;
+import com.fareast.worker.service.WeatherWarningService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -88,6 +89,9 @@ public class WorkerController {
 
     @Autowired
     private WorkerCompanyChangeRequestRepository workerCompanyChangeRequestRepository;
+
+    @Autowired
+    private WeatherWarningService weatherWarningService;
 
     /** Convert WorkerProfile to a safe Map (no lazy associations) */
     private Map<String, Object> toProfileMap(WorkerProfile p) {
@@ -351,6 +355,37 @@ public class WorkerController {
         return m;
     }
 
+    /**
+     * 黑名单交叉比對：按姓名和工人注册证号跨工人比对 blacklist_records
+     * 任一匹配（且 removed_at IS NULL）则返回错误提示，null 表示通过
+     */
+    private String checkBlacklistCross(WorkerProfile profile) {
+        // 1. 姓名比对（优先取 WorkerProfile.chineseName，其次 User.name）
+        String name = profile.getChineseName();
+        if (name == null || name.trim().isEmpty()) {
+            User user = userRepository.findById(profile.getUserId()).orElse(null);
+            if (user != null) name = user.getName();
+        }
+        if (name != null && !name.trim().isEmpty()) {
+            List<BlacklistRecord> byName = blacklistRecordRepository.findByNameAndStatusTrue(name.trim());
+            if (byName != null && !byName.isEmpty()) {
+                return "您的申請不批准，請聯絡所屬公司判頭";
+            }
+        }
+
+        // 2. 工人注册证号比对
+        String regNum = profile.getWorkerRegistrationNum();
+        if (regNum != null && !regNum.trim().isEmpty()) {
+            List<BlacklistRecord> byReg = blacklistRecordRepository
+                    .findByWorkerRegistrationNumAndStatusTrue(regNum.trim());
+            if (byReg != null && !byReg.isEmpty()) {
+                return "您的申請不批准，請聯絡所屬公司判頭";
+            }
+        }
+
+        return null; // 校验通过
+    }
+
     @PostMapping("/apply-site")
     public ApiResponse<Map<String, Object>> applySite(
             @AuthenticationPrincipal String userId,
@@ -386,6 +421,12 @@ public class WorkerController {
         List<BlacklistRecord> blacklist = blacklistRecordRepository.findByWorkerIdAndRemovedAtIsNull(uid);
         if (blacklist != null && !blacklist.isEmpty()) {
             return ApiResponse.error("您已被列入黑名单，无法申请加入地盘");
+        }
+
+        // 2.5 黑名单交叉比對（姓名/注册证号跨工人匹配）
+        String crossMsg = checkBlacklistCross(profile);
+        if (crossMsg != null) {
+            return ApiResponse.error(crossMsg);
         }
 
         if (profile.getCurrentSiteId() != null) {
@@ -520,6 +561,18 @@ public class WorkerController {
         result.put("totalScore", 15);
         result.put("siteId", siteId);
         result.put("message", "成功获取地盘安全分");
+        return ApiResponse.success(result);
+    }
+
+    /**
+     * GET /worker/weather-warnings
+     * 获取当前生效的天气警告（台风/暴雨/酷热/工作暑热）
+     */
+    @GetMapping("/weather-warnings")
+    public ApiResponse<Map<String, Object>> getWeatherWarnings() {
+        Map<String, Object> result = new HashMap<>();
+        result.put("warnsum", weatherWarningService.getWarnsum());
+        result.put("hsww", weatherWarningService.getHsww());
         return ApiResponse.success(result);
     }
 
