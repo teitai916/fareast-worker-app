@@ -6,6 +6,7 @@ import 'package:fareast_worker_app/services/api_service.dart';
 import 'package:fareast_worker_app/pages/worker/safety_videos_page.dart';
 import 'package:fareast_worker_app/pages/notifications_page.dart';
 import 'package:fareast_worker_app/pages/internal/scan_deduct_page.dart';
+import 'package:fareast_worker_app/widgets/weather_warning_bar.dart';
 import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -55,7 +56,9 @@ class _InternalHomePageState extends State<InternalHomePage> {
       try {
         final dateStr = _selectedDate.toIso8601String().split('T')[0];
         attData = await _api.internalGetDailyAttendance(dateStr);
-      } catch (_) {}
+      } catch (_) {
+        // 考勤数据不影响首页主流程，静默
+      }
 
       if (!mounted) return;
       setState(() {
@@ -73,6 +76,12 @@ class _InternalHomePageState extends State<InternalHomePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('加載失敗：${e.toString().replaceAll("Exception: ", "")}'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
     }
   }
 
@@ -81,7 +90,15 @@ class _InternalHomePageState extends State<InternalHomePage> {
       final data = await _api.getLockedWorkers();
       if (!mounted) return;
       setState(() => _lockedWorkers = data);
-    } catch (_) {}
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('加載鎖卡列表失敗：${e.toString().replaceAll("Exception: ", "")}'),
+          backgroundColor: AppTheme.warningColor,
+        ),
+      );
+    }
   }
 
   String _formatTime(String? isoTime) {
@@ -553,6 +570,8 @@ class _InternalHomePageState extends State<InternalHomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 天气警告栏（用户卡片上方）
+              const WeatherWarningBar(isInternal: true),
               // 用户信息卡片
               _buildUserCard(name, siteName),
               const SizedBox(height: 20),
@@ -941,7 +960,15 @@ class _InternalHomePageState extends State<InternalHomePage> {
       final attData = await _api.internalGetDailyAttendance(dateStr);
       if (!mounted) return;
       setState(() => _attendanceData = attData);
-    } catch (_) {}
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('加載考勤記錄失敗：${e.toString().replaceAll("Exception: ", "")}'),
+          backgroundColor: AppTheme.warningColor,
+        ),
+      );
+    }
   }
 
   Widget _buildLockedWorkerCard(Map<String, dynamic> worker) {

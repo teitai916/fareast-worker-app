@@ -83,7 +83,14 @@ class _RegisterPageState extends State<RegisterPage> {
       setState(() => _companies = data);
     } catch (e) {
       if (!mounted) return;
-      // 靜默失敗，下拉將顯示空列表
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('加載公司列表失敗：${e.toString().replaceAll("Exception: ", "")}'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loadingCompanies = false);
     }

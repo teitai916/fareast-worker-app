@@ -34,7 +34,13 @@ class _SiteDetailPageState extends State<SiteDetailPage> {
       );
       setState(() => _site = site);
     } catch (e) {
-      // 静默失败，使用传入的 siteName
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('加載地盤信息失敗：${e.toString().replaceAll("Exception: ", "")}'),
+          backgroundColor: AppTheme.warningColor,
+        ),
+      );
     }
     setState(() => _loading = false);
   }

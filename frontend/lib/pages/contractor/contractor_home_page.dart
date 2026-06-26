@@ -74,6 +74,11 @@ class _ContractorHomePageState extends State<ContractorHomePage>
       }
     } catch (e) {
       if (mounted) setState(() => _isLoadingSites = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll("Exception: ", "")), backgroundColor: AppTheme.errorColor),
+        );
+      }
     }
   }
 
@@ -90,6 +95,11 @@ class _ContractorHomePageState extends State<ContractorHomePage>
       }
     } catch (e) {
       if (mounted) setState(() => _isLoadingWorkers = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll("Exception: ", "")), backgroundColor: AppTheme.errorColor),
+        );
+      }
     }
   }
 
@@ -98,7 +108,7 @@ class _ContractorHomePageState extends State<ContractorHomePage>
       final count = await _api.getUnreadNotificationCount();
       if (mounted) setState(() => _unreadNotificationCount = count);
     } catch (e) {
-      // 静默失败
+      // 通知数量 - 后台静默，不影响主流程
     }
   }
 
@@ -107,7 +117,7 @@ class _ContractorHomePageState extends State<ContractorHomePage>
       final count = await _api.getPendingApplicationCount();
       if (mounted) setState(() => _pendingCount = count);
     } catch (e) {
-      // 静默失败
+      // 通知数量 - 后台静默，不影响主流程
     }
   }
 
@@ -124,6 +134,11 @@ class _ContractorHomePageState extends State<ContractorHomePage>
       });
     } catch (e) {
       if (mounted) setState(() => _loadingApps = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll("Exception: ", "")), backgroundColor: AppTheme.errorColor),
+        );
+      }
     }
   }
 
@@ -139,6 +154,11 @@ class _ContractorHomePageState extends State<ContractorHomePage>
       });
     } catch (e) {
       if (mounted) setState(() => _loadingChanges = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll("Exception: ", "")), backgroundColor: AppTheme.errorColor),
+        );
+      }
     }
   }
 
@@ -154,6 +174,11 @@ class _ContractorHomePageState extends State<ContractorHomePage>
       });
     } catch (e) {
       if (mounted) setState(() => _loadingCompanyChanges = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll("Exception: ", "")), backgroundColor: AppTheme.errorColor),
+        );
+      }
     }
   }
 

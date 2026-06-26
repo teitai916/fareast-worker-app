@@ -56,6 +56,9 @@ class _ContractorReviewPageState extends State<ContractorReviewPage>
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadingApps = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceAll("Exception: ", "")), backgroundColor: AppTheme.errorColor),
+      );
     }
   }
 
@@ -70,6 +73,9 @@ class _ContractorReviewPageState extends State<ContractorReviewPage>
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadingChanges = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceAll("Exception: ", "")), backgroundColor: AppTheme.errorColor),
+      );
     }
   }
 
@@ -85,6 +91,9 @@ class _ContractorReviewPageState extends State<ContractorReviewPage>
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadingCompanyChanges = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceAll("Exception: ", "")), backgroundColor: AppTheme.errorColor),
+      );
     }
   }
 

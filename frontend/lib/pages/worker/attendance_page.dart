@@ -155,7 +155,7 @@ class _AttendancePageState extends State<AttendancePage> {
         _monthlyDays = days.cast<int>();
       });
     } catch (e) {
-      // 忽略錯誤，日曆不顯示高亮
+      // 月度数据失败不影响主流程，静默
     }
   }
 
@@ -173,7 +173,7 @@ class _AttendancePageState extends State<AttendancePage> {
         _isLocked = (profile?['cardLocked'] == true || profile?['blacklisted'] == true);
       });
     } catch (e) {
-      // 載入失敗不阻斷打卡功能，_onCheckIn 會處理
+      // 载入失败不阻斷打卡，_onCheckIn 和打卡按钮会处理空值
     }
   }
 

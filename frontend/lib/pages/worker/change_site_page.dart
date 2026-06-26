@@ -68,6 +68,12 @@ class _ChangeSitePageState extends State<ChangeSitePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _historyLoading = false);
+      final msg = e.toString().replaceAll("Exception: ", "");
+      if (msg != 'NO_RECORD' && !msg.contains('無記錄')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: AppTheme.warningColor),
+        );
+      }
     }
   }
 

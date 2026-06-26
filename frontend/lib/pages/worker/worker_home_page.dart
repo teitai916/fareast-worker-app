@@ -8,6 +8,7 @@ import 'package:fareast_worker_app/pages/worker/attendance_page.dart';
 import 'package:fareast_worker_app/pages/worker/safety_videos_page.dart';
 import 'package:fareast_worker_app/pages/worker/site_apply_page.dart';
 import 'package:fareast_worker_app/pages/notifications_page.dart';
+import 'package:fareast_worker_app/widgets/weather_warning_bar.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 class WorkerHomePage extends StatefulWidget {
@@ -218,6 +219,8 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 天气警告栏（用户卡片上方）
+              const WeatherWarningBar(),
               // 用户信息卡片
               Container(
                 width: double.infinity,

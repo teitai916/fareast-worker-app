@@ -56,6 +56,12 @@ class _ChangeCompanyPageState extends State<ChangeCompanyPage> {
       setState(() {
         _currentCompanyName = '未知公司';
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('加載公司信息失敗：${e.toString().replaceAll("Exception: ", "")}'),
+          backgroundColor: AppTheme.warningColor,
+        ),
+      );
     }
   }
 
