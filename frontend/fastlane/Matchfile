@@ -1,0 +1,26 @@
+# Fastlane Match 配置
+#
+# 注意：以下占位值需要在 GitHub 仓库中配置对应的 Secrets：
+#   MATCH_GIT_URL           — 存储证书的私有 Git 仓库地址
+#   MATCH_PASSWORD          — 加密证书的密码
+#   APPLE_TEAM_ID           — Apple Developer Team ID
+
+git_url(ENV["MATCH_GIT_URL"])
+storage_mode("git")
+
+type("appstore")            # 仅管理 App Store 分发证书
+app_identifier(["com.fareast.fareastWorkerApp"])
+username(ENV["APPLE_ID"])   # Apple Developer 账号邮箱（可选，match 自动检测）
+
+# 自动管理 keychain
+keychain_name("fastlane_match")
+keychain_password("temp_keychain_pass")
+
+# 只读模式（CI 不需要创建新证书）
+readonly(true)
+
+# 生成 xcconfig（让 Xcode 项目自动使用 match 管理的证书）
+generate_apple_certs(true)
+
+# 平台
+platform("ios")

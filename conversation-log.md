@@ -1018,3 +1018,38 @@ HSWW 颜色：AMBER=橙色, RED=红色, **BLACK=黑色**
 
 </details>
 
+---
+
+## Round 49 — 2026-06-29 14:29
+
+**提问摘要**：mobile_scanner 编译报 Renderscript 弃用警告 + APK 体积过大精简
+
+**AI 回复要点**：
+- 升级 mobile_scanner 6.0.0 → 7.2.0 解决 Renderscript 弃用警告
+- 制定 APK 精简 4 项方案（ABI 拆分 / 剔除 x86_64 / MLKit unbundled / R8 压缩）
+- 发现 mobile_scanner 7.2.0 与 unbundled MLKit 不兼容（`Barcode.data` 编译报错），回退为 bundled
+- 配置 Gradle 抑制 Kotlin 编译器弃用警告 + Renderscript lint
+- 修复三个构建问题：`com.android.library` 插件缺失、R8 Play Core missing class、Kotlin 增量编译缓存损坏
+
+<details><summary>详细信息</summary>
+
+### 已完成改动
+
+| 文件 | 改动 |
+|------|------|
+| `frontend/pubspec.yaml:44` | `mobile_scanner: ^6.0.0` → `^7.2.0` |
+| `frontend/android/settings.gradle.kts:23` | 新增 `id("com.android.library") version "8.11.1" apply false` |
+| `frontend/android/app/build.gradle.kts` | `kotlinOptions.freeCompilerArgs` 加入 `-Xsuppress-deprecated-java-package-warnings`；`lint.disable.add("RenderscriptDeprecation")`；Release 开启 `isMinifyEnabled` + `isShrinkResources`；移除无效的 `ndk.abiFilters` |
+| `frontend/android/app/proguard-rules.pro` | **新建**：Flutter / MLKit / Play Core 的 keep + dontwarn 规则 |
+| `frontend/android/gradle.properties` | 新增 `kotlin.incremental=false` + `kotlin.incremental.usePreciseJavaTracking=false` |
+
+### 关键技术点
+
+1. **`--target-platform` 替代 `ndk.abiFilters`**：后者只能过滤 C/C++ .so，对 Dart 编译的 `libapp.so` 无效。正确方式是 `flutter build apk --release --target-platform android-arm,android-arm64` 排除 x86_64。
+
+2. **Kotlin 增量编译 Windows 兼容性**：`kotlin.incremental=true`（默认）在 Windows 上会产生 `"Storage already registered"` 缓存损坏错误。根因是内存映射文件在多进程并发时冲突。修复：`gradle.properties` 设置 `kotlin.incremental=false`，彻底禁用增量编译。
+
+3. **mobile_scanner 7.2.0 的 MLKit 限制**：虽然支持 unbundled 选项（`dev.steenbakker.mobile_scanner.useUnbundled=true`），但 7.2.0 源码中使用了 `barcode.data`（MLKit `Barcode.getData()`），该 API 在 play-services-mlkit 中已移除，只能用 bundled 版本。
+
+</details>
+

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // 品牌色
-  static const Color primaryColor = Color(0xFF1A73E8);
-  static const Color primaryLight = Color(0xFF4A90D9);
-  static const Color primaryDark = Color(0xFF0D47A1);
+  // ─── 品牌色（方案二：蓝白极简风） ───
+  static const Color primaryColor = Color(0xFF2563EB);   // 明亮蓝
+  static const Color primaryLight = Color(0xFF60A5FA);   // 浅蓝
+  static const Color primaryDark = Color(0xFF1D4ED8);    // 深蓝
 
   // 功能色
   static const Color successColor = Color(0xFF34C759);
@@ -12,17 +12,21 @@ class AppTheme {
   static const Color errorColor = Color(0xFFFF3B30);
   static const Color infoColor = Color(0xFF007AFF);
 
-  // 香港股市红涨绿跌 -> 使用常规色彩
-  static const Color safeColor = Color(0xFF34C759); // 安全
-  static const Color dangerColor = Color(0xFFFF3B30); // 危险
+  // 安全状态色
+  static const Color safeColor = Color(0xFF34C759);
+  static const Color dangerColor = Color(0xFFFF3B30);
 
-  // 基础色
-  static const Color backgroundColor = Color(0xFFF5F5F5);
+  // 基础色（白底 + 柔灰）
+  static const Color backgroundColor = Colors.white;
   static const Color cardColor = Colors.white;
-  static const Color dividerColor = Color(0xFFE0E0E0);
-  static const Color textPrimary = Color(0xFF1D1D1F);
-  static const Color textSecondary = Color(0xFF6E6E73);
-  static const Color textHint = Color(0xFFC7C7CC);
+  static const Color dividerColor = Color(0xFFE2E8F0);
+  static const Color textPrimary = Color(0xFF1E293B);
+  static const Color textSecondary = Color(0xFF64748B);
+  static const Color textHint = Color(0xFF94A3B8);
+
+  // 品牌强调色（Logo 弧形元素等使用）
+  static const Color accentColor = Color(0xFF2563EB);
+  static const Color accentLight = Color(0xFF93C5FD);
 
   static ThemeData get lightTheme {
     return ThemeData(

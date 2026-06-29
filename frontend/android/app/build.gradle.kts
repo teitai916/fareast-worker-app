@@ -17,6 +17,11 @@ android {
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_17.toString()
+        freeCompilerArgs += listOf("-Xsuppress-deprecated-java-package-warnings")
+    }
+
+    lint {
+        disable.add("RenderscriptDeprecation")
     }
 
     defaultConfig {
@@ -35,8 +40,17 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+
+            // Enable R8 code shrinking, obfuscation, and optimization
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
+    
 }
 
 flutter {

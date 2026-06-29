@@ -1,0 +1,43 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "构建并导出 IPA"
+  lane :build_and_export do
+    # 参数配置（可从环境变量覆盖）
+    team_id = ENV["APPLE_TEAM_ID"]
+    bundle_id = "com.fareast.fareastWorkerApp"
+
+    # 使用 gym 构建 .xcarchive 并导出 IPA
+    gym(
+      scheme: "Runner",
+      workspace: "ios/Runner.xcworkspace",
+      configuration: "Release",
+      clean: true,
+      export_method: "app-store",
+      export_options: {
+        method: "app-store",
+        teamID: team_id,
+        signingStyle: "automatic",
+        uploadBitcode: false,
+        uploadSymbols: true
+      },
+      output_directory: "build/ios/ipa",
+      output_name: "fareast_worker_app.ipa"
+    )
+  end
+
+  desc "上传 IPA 到 TestFlight"
+  lane :upload_testflight do
+    pilot(
+      ipa: "build/ios/ipa/fareast_worker_app.ipa",
+      skip_waiting_for_build_processing: true,
+      distribute_only: true,
+      notify_external_testers: true
+    )
+  end
+
+  desc "仅同步签名证书（调试用）"
+  lane :sync_certs do
+    match(type: "appstore", readonly: true)
+  end
+end

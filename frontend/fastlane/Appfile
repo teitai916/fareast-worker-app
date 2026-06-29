@@ -1,0 +1,8 @@
+# Apple Developer Team ID — 通过 CI 环境变量 APPLE_TEAM_ID 设置
+team_id = ENV["APPLE_TEAM_ID"]
+
+# App Identifier
+app_identifier "com.fareast.fareastWorkerApp"
+
+# 自动从环境变量读取 Apple ID（登录用，仅在使用用户名/密码时需设置）
+# apple_id = ENV["APPLE_ID"]

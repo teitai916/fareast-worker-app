@@ -10,7 +10,7 @@
     <!-- 网络权限 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <application
-        android:label="fareast_worker_app"
+        android:label="遠東工友通"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">

@@ -9,45 +9,73 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  static const Color _blue = Color(0xFF2563EB);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
               const SizedBox(height: 60),
-              // Logo
+              // Logo - 白底 + 亮蓝渐变光晕
               Container(
-                width: 88,
-                height: 88,
+                width: 96,
+                height: 96,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppTheme.primaryColor, AppTheme.primaryLight],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(22),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: AppTheme.primaryColor.withOpacity(0.3),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
+                      color: _blue.withOpacity(0.15),
+                      blurRadius: 24,
+                      offset: const Offset(0, 10),
+                    ),
+                    BoxShadow(
+                      color: _blue.withOpacity(0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
-                child: const Icon(Icons.construction, color: Colors.white, size: 48),
+                padding: const EdgeInsets.all(12),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: Image.asset(
+                    'assets/images/logo_primary.png',
+                    fit: BoxFit.contain,
+                  ),
+                ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
               const Text(
-                '遠東工友',
-                style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                '遠東工友通',
+                style: TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                '香港建築工地工人安全管理平台',
-                style: TextStyle(fontSize: 15, color: AppTheme.textSecondary),
+              const SizedBox(height: 6),
+              Text(
+                'FAREAST WORKER APP',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: const Color(0xFF64748B).withOpacity(0.5),
+                  letterSpacing: 4,
+                  fontWeight: FontWeight.w300,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '以幕牆科技，建安全工地',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: _blue.withOpacity(0.65),
+                ),
               ),
               const SizedBox(height: 48),
 
@@ -103,10 +131,13 @@ class _LoginPageState extends State<LoginPage> {
                 height: 50,
                 child: ElevatedButton.icon(
                   onPressed: () => Navigator.pushNamed(context, '/login-form'),
-                  icon: const Icon(Icons.login, size: 20),
-                  label: const Text('手機號碼登入', style: TextStyle(fontSize: 16)),
+                  icon: const Icon(Icons.login, size: 20, color: Colors.white),
+                  label: const Text('手機號碼登入', style: TextStyle(fontSize: 16, color: Colors.white)),
                   style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    backgroundColor: _blue,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                 ),
               ),

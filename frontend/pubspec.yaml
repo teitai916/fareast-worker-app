@@ -1,5 +1,5 @@
 name: fareast_worker_app
-description: 远东工友 - 香港建筑工地工人安全管理平台
+description: 遠東工友通 - 香港建築工地工人安全管理平台，由遠東幕牆打造
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -41,7 +41,7 @@ dependencies:
 
   # QR Code
   qr_flutter: ^4.1.0
-  mobile_scanner: ^6.0.0
+  mobile_scanner: ^7.2.0
 
   # Web content display
   webview_flutter: ^4.10.0
@@ -66,4 +66,9 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/images/logo_primary.png
+    - assets/images/logo_vertical_en.png
+    - assets/images/logo_horizontal_cn_en.png
+    - assets/images/logo_vertical_cn.png
+    - assets/images/logo_horizontal_cn_en_white.png
     - assets/animations/

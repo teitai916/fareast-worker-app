@@ -164,7 +164,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
     if (_loading) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('遠東工友'),
+          title: const Text('遠東工友通'),
           automaticallyImplyLeading: false,
         ),
         body: const Center(child: CircularProgressIndicator()),
@@ -174,7 +174,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
     if (_error != null) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('遠東工友'),
+          title: const Text('遠東工友通'),
           automaticallyImplyLeading: false,
         ),
         body: Center(
@@ -195,7 +195,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('遠東工友'),
+        title: const Text('遠東工友通'),
         automaticallyImplyLeading: false,
         actions: [
           if (!hasSite && !_isLocked && !_hasPendingApplication)
@@ -615,74 +615,65 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 36,
-                  backgroundColor: AppTheme.primaryColor,
-                  child: Text(name.isNotEmpty ? name[0] : '工',
-                      style: const TextStyle(color: Colors.white, fontSize: 28)),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text(_workerNumber ?? '', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-                    ],
+          // ─── 合併卡片：個人資料 + 所屬公司 ───
+          InkWell(
+            onTap: () => Navigator.pushNamed(context, '/worker/register'),
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+              ),
+              child: Row(
+                children: [
+                  // 左侧：头像
+                  CircleAvatar(
+                    radius: 36,
+                    backgroundColor: AppTheme.primaryColor,
+                    child: Text(name.isNotEmpty ? name[0] : '工',
+                        style: const TextStyle(color: Colors.white, fontSize: 28)),
                   ),
-                ),
-                // 二维码图标
-                IconButton(
-                  onPressed: _workerNumber != null ? () => _showQrCodeDialog() : null,
-                  icon: Icon(Icons.qr_code, color: AppTheme.textHint, size: 28),
-                  tooltip: '查看工人編碼二維碼',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          
-          // 所屬公司信息卡片
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.business, color: AppTheme.primaryColor),
-                    const SizedBox(width: 8),
-                    const Text('所屬公司', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (_companyName != null && _companyName!.isNotEmpty) ...[
-                  Text(_companyName!, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
-                ] else ...[
-                  Text('暫無公司', style: TextStyle(fontSize: 14, color: AppTheme.textHint)),
+                  const SizedBox(width: 16),
+                  // 中间：姓名 + 公司
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(Icons.business, size: 14, color: AppTheme.textSecondary),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                (_companyName != null && _companyName!.isNotEmpty)
+                                    ? _companyName!
+                                    : '暫無公司',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: _companyName != null && _companyName!.isNotEmpty
+                                      ? AppTheme.textSecondary
+                                      : AppTheme.textHint,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  // 右侧：箭头
+                  Icon(Icons.chevron_right, color: AppTheme.textHint, size: 28),
                 ],
-              ],
+              ),
             ),
           ),
           
           const SizedBox(height: 24),
-          _buildMenuItem(Icons.badge_outlined, '個人資料', () =>
-              Navigator.pushNamed(context, '/worker/register')),
           _buildMenuItem(Icons.videocam_outlined, '安全培訓影片', () =>
               Navigator.push(context, MaterialPageRoute(builder: (_) => const SafetyVideosPage()))),
           _buildMenuItem(Icons.credit_card_outlined, '考勤記錄', () =>

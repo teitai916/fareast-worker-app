@@ -10,7 +10,7 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '遠東工友',
+      title: '遠東工地通',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       home: const SplashPage(),
