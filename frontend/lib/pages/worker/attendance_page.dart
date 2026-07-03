@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:fareast_worker_app/config/theme.dart';
@@ -339,6 +340,7 @@ class _AttendancePageState extends State<AttendancePage> {
       await _loadMonthlyDays();
       if (!mounted) return;
       final isCheckOut = result['checkOutTime'] != null;
+      HapticFeedback.heavyImpact();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(isCheckOut ? '離場打卡成功！' : '入場打卡成功！'),

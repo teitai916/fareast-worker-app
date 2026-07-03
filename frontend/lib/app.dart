@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/config/routes.dart';
 import 'package:fareast_worker_app/pages/splash_page.dart';
+import 'package:fareast_worker_app/services/shortcut_service.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -10,6 +11,7 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       title: '遠東工地通',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,

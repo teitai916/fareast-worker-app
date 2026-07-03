@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
@@ -21,8 +22,11 @@ class WorkerHomePage extends StatefulWidget {
 class _WorkerHomePageState extends State<WorkerHomePage> {
   final _api = ApiService();
   int _currentIndex = 0;
+  late final PageController _pageController;
   bool _loading = true;
   String? _error;
+  DateTime? _lastBackTime; // 双击退出
+  int _unreadNotifications = 0; // 未读通知数
 
   // 工人首页数据
   Map<String, dynamic>? _homeData;
@@ -39,7 +43,14 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -79,6 +90,10 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
       }
 
       if (!mounted) return;
+
+      // 获取未读通知数（角标用）
+      _loadUnreadCount();
+
       setState(() {
         _homeData = data;
         _profile = data['profile'];
@@ -108,6 +123,13 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
     } catch (_) {
       return isoTime;
     }
+  }
+
+  Future<void> _loadUnreadCount() async {
+    try {
+      final count = await _api.getUnreadNotificationCount();
+      if (mounted) setState(() => _unreadNotifications = count);
+    } catch (_) { /* 静默，角标非关键功能 */ }
   }
 
   @override
@@ -140,21 +162,50 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
     }
 
     final pages = [_buildHome(), _buildSitePage(), _buildProfilePage()];
-    return Scaffold(
-      body: pages[_currentIndex],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        final now = DateTime.now();
+        if (_lastBackTime == null || now.difference(_lastBackTime!) > const Duration(seconds: 2)) {
+          _lastBackTime = now;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('再按一次返回鍵退出'), duration: Duration(seconds: 2)),
+          );
+        } else {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (i) {
+          setState(() => _currentIndex = i);
+          if (i == 0) _loadData();
+        },
+        children: pages,
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (i) {
-          setState(() => _currentIndex = i);
-          _loadData(); // 切換回首頁時刷新數據
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: '首頁'),
-          BottomNavigationBarItem(icon: Icon(Icons.location_on_outlined), label: '地盤'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: '我的'),
+        onTap: (i) => _pageController.animateToPage(
+          i,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        ),
+        items: [
+          const BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: '首頁'),
+          const BottomNavigationBarItem(icon: Icon(Icons.location_on_outlined), label: '地盤'),
+          BottomNavigationBarItem(
+            icon: Badge(
+              isLabelVisible: _unreadNotifications > 0,
+              label: Text('${_unreadNotifications > 99 ? '99+' : _unreadNotifications}'),
+              child: const Icon(Icons.person_outline),
+            ),
+            label: '我的',
+          ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildHome() {
@@ -705,8 +756,10 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
     final canChangeSite = !_isLocked && hasSite;
     final canChangeCompany = !_isLocked && hasCompany;
     final actions = [
-      _QuickActionData(Icons.fingerprint, '打卡', canCheckIn, () =>
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const AttendancePage()))),
+      _QuickActionData(Icons.fingerprint, '打卡', canCheckIn, () {
+        HapticFeedback.mediumImpact();
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const AttendancePage()));
+      }),
       _QuickActionData(Icons.smart_display, '安全培訓', canTrain, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const SafetyVideosPage()))),
       _QuickActionData(Icons.swap_horiz, '更換地盤', canChangeSite, () =>
@@ -798,8 +851,10 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
     final canChangeSite = !_isLocked && hasSite;
     final canChangeCompany = !_isLocked && hasCompany;
     final allActions = [
-      _QuickActionData(Icons.fingerprint, '打卡', canCheckIn, () =>
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const AttendancePage()))),
+      _QuickActionData(Icons.fingerprint, '打卡', canCheckIn, () {
+        HapticFeedback.mediumImpact();
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const AttendancePage()));
+      }),
       _QuickActionData(Icons.smart_display, '安全培訓', canTrain, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const SafetyVideosPage()))),
       _QuickActionData(Icons.swap_horiz, '更換地盤', canChangeSite, () =>

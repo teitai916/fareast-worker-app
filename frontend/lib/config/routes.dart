@@ -11,11 +11,13 @@ import 'package:fareast_worker_app/pages/worker/change_site_page.dart';
 import 'package:fareast_worker_app/pages/worker/site_detail_page.dart';
 import 'package:fareast_worker_app/pages/worker/history_sites_page.dart';
 import 'package:fareast_worker_app/pages/worker/site_apply_page.dart';
+import 'package:fareast_worker_app/pages/worker/change_company_page.dart';
 import 'package:fareast_worker_app/pages/contractor/contractor_home_page.dart';
 import 'package:fareast_worker_app/pages/contractor/contractor_review_page.dart';
 import 'package:fareast_worker_app/pages/notifications_page.dart';
 import 'package:fareast_worker_app/pages/admin/admin_home_page.dart';
 import 'package:fareast_worker_app/pages/internal/internal_home_page.dart';
+import 'package:fareast_worker_app/pages/internal/scan_deduct_page.dart';
 
 class AppRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -39,6 +41,8 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const AttendancePage());
       case '/worker/change-site':
         return MaterialPageRoute(builder: (_) => const ChangeSitePage());
+      case '/worker/change-company':
+        return MaterialPageRoute(builder: (_) => const ChangeCompanyPage());
       case '/worker/site-detail':
         return MaterialPageRoute(builder: (_) => const SiteDetailPage());
       case '/worker/history-sites':
@@ -55,6 +59,8 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const AdminHomePage());
       case '/internal/home':
         return MaterialPageRoute(builder: (_) => const InternalHomePage());
+      case '/internal/scan-deduct':
+        return MaterialPageRoute(builder: (_) => const ScanDeductPage());
       default:
         return MaterialPageRoute(builder: (_) => const LoginPage());
     }

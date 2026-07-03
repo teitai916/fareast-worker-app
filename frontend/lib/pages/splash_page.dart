@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
+import 'package:fareast_worker_app/services/shortcut_service.dart';
 import 'package:fareast_worker_app/pages/auth/login_page.dart';
 import 'package:fareast_worker_app/pages/worker/worker_home_page.dart';
 import 'package:fareast_worker_app/pages/contractor/contractor_home_page.dart';
@@ -58,6 +59,7 @@ class _SplashPageState extends State<SplashPage>
     await Future.delayed(const Duration(milliseconds: 1500));
 
     if (token == null || token.isEmpty) {
+      ShortcutService.setupForRole(null); // 清除快捷操作
       _go(const LoginPage());
       return;
     }
@@ -67,6 +69,9 @@ class _SplashPageState extends State<SplashPage>
       final user = await ApiService().authMe();
       await TokenManager.setUser(user);
       final role = user.role;
+
+      // 根据角色设置快捷操作
+      ShortcutService.setupForRole(role);
 
       if (role == 'WORKER') {
         _go(const WorkerHomePage());
@@ -79,6 +84,7 @@ class _SplashPageState extends State<SplashPage>
       }
     } catch (e) {
       await TokenManager.clear();
+      ShortcutService.setupForRole(null); // 清除快捷操作
       _go(const LoginPage());
     }
   }

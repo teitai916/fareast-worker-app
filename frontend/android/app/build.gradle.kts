@@ -29,7 +29,7 @@ android {
         applicationId = "com.fareast.fareast_worker_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 25 // 至少需要 Android 7.1 支持动态快捷操作
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

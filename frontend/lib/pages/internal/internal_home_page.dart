@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:typed_data';
 import 'dart:io';
 import 'package:fareast_worker_app/config/theme.dart';
@@ -20,7 +21,10 @@ class InternalHomePage extends StatefulWidget {
 class _InternalHomePageState extends State<InternalHomePage> {
   final _api = ApiService();
   int _currentIndex = 0;
+  late final PageController _pageController;
   bool _loading = true;
+  DateTime? _lastBackTime;
+  int _unreadNotifications = 0;
 
   // 首页数据
   Map<String, dynamic>? _homeData;
@@ -41,8 +45,16 @@ class _InternalHomePageState extends State<InternalHomePage> {
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
     _loadData();
     _loadLockedWorkers();
+    _loadUnreadCount();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -99,6 +111,13 @@ class _InternalHomePageState extends State<InternalHomePage> {
         ),
       );
     }
+  }
+
+  Future<void> _loadUnreadCount() async {
+    try {
+      final count = await _api.getUnreadNotificationCount();
+      if (mounted) setState(() => _unreadNotifications = count);
+    } catch (_) { /* 静默 */ }
   }
 
   String _formatTime(String? isoTime) {
@@ -513,20 +532,49 @@ class _InternalHomePageState extends State<InternalHomePage> {
   @override
   Widget build(BuildContext context) {
     final pages = [_buildHome(), _buildProfilePage()];
-    return Scaffold(
-      body: pages[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (i) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        final now = DateTime.now();
+        if (_lastBackTime == null || now.difference(_lastBackTime!) > const Duration(seconds: 2)) {
+          _lastBackTime = now;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('再按一次返回鍵退出'), duration: Duration(seconds: 2)),
+          );
+        } else {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (i) {
           setState(() => _currentIndex = i);
           if (i == 0) { _loadData(); _loadLockedWorkers(); }
         },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: '首頁'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: '個人中心'),
+        children: pages,
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (i) => _pageController.animateToPage(
+          i,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        ),
+        items: [
+          const BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: '首頁'),
+          BottomNavigationBarItem(
+            icon: Badge(
+              isLabelVisible: _unreadNotifications > 0,
+              label: Text('${_unreadNotifications > 99 ? '99+' : _unreadNotifications}'),
+              child: const Icon(Icons.person_outline),
+            ),
+            label: '個人中心',
+          ),
         ],
       ),
-    );
+    ));
   }
 
   // ==================== Tab 0: 首页 ====================
@@ -760,7 +808,7 @@ class _InternalHomePageState extends State<InternalHomePage> {
             Navigator.push(context, MaterialPageRoute(builder: (_) => const SafetyVideosPage()))),
         _quickAction(Icons.add_location, '申請地盤', true, _showApplySiteDialog),
         _quickAction(Icons.lock_open, '解鎖工人', _lockedWorkers.isNotEmpty, () {
-          _currentIndex = 0; // scroll down to locked workers
+          _pageController.animateToPage(0, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
         }),
       ],
     );

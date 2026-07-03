@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
 import 'package:fareast_worker_app/pages/notifications_page.dart';
+import 'package:fareast_worker_app/widgets/empty_state_widget.dart';
 
 class ContractorHomePage extends StatefulWidget {
   const ContractorHomePage({super.key});
@@ -15,6 +17,8 @@ class ContractorHomePage extends StatefulWidget {
 class _ContractorHomePageState extends State<ContractorHomePage>
     with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
+  late final PageController _pageController;
+  DateTime? _lastBackTime;
   int _unreadNotificationCount = 0;
   int _pendingCount = 0;
   int _pendingAppCount = 0;   // 入盘申请待审核数
@@ -45,6 +49,7 @@ class _ContractorHomePageState extends State<ContractorHomePage>
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
     _auditTabController = TabController(length: 3, vsync: this);
     _loadUnreadCount();
     _loadPendingCount();
@@ -57,6 +62,7 @@ class _ContractorHomePageState extends State<ContractorHomePage>
   @override
   void dispose() {
     _auditTabController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -184,18 +190,24 @@ class _ContractorHomePageState extends State<ContractorHomePage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          _buildSiteManagement(),
-          _buildAuditPage(),
-          _buildProfilePage(),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (i) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        final now = DateTime.now();
+        if (_lastBackTime == null || now.difference(_lastBackTime!) > const Duration(seconds: 2)) {
+          _lastBackTime = now;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('再按一次返回鍵退出'), duration: Duration(seconds: 2)),
+          );
+        } else {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (i) {
           setState(() => _currentIndex = i);
           if (i == 0) {
             _loadSites();
@@ -208,6 +220,19 @@ class _ContractorHomePageState extends State<ContractorHomePage>
             _loadCompanyChangeRequests();
           }
         },
+        children: [
+          _buildSiteManagement(),
+          _buildAuditPage(),
+          _buildProfilePage(),
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (i) => _pageController.animateToPage(
+          i,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        ),
         items: [
           const BottomNavigationBarItem(
             icon: Icon(Icons.location_city_outlined),
@@ -243,7 +268,7 @@ class _ContractorHomePageState extends State<ContractorHomePage>
           ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildSiteManagement() {
@@ -322,7 +347,7 @@ class _ContractorHomePageState extends State<ContractorHomePage>
               const Center(
                 child: Padding(
                   padding: EdgeInsets.all(32),
-                  child: Text('暫無工人', style: TextStyle(color: AppTheme.textSecondary)),
+                  child: EmptyStateWidget(icon: Icons.person_off, title: '暫無工人'),
                 ),
               )
             else
@@ -469,7 +494,7 @@ class _ContractorHomePageState extends State<ContractorHomePage>
   Widget _buildAppList() {
     if (_loadingApps) return const Center(child: CircularProgressIndicator());
     if (_applications.isEmpty) {
-      return const Center(child: Text('暫無待審核申請', style: TextStyle(color: AppTheme.textHint)));
+      return const EmptyStateWidget(icon: Icons.inbox, title: '暫無待審核申請');
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -525,7 +550,7 @@ class _ContractorHomePageState extends State<ContractorHomePage>
   Widget _buildChangeList() {
     if (_loadingChanges) return const Center(child: CircularProgressIndicator());
     if (_changeRequests.isEmpty) {
-      return const Center(child: Text('暫無待審核更換申請', style: TextStyle(color: AppTheme.textHint)));
+      return const EmptyStateWidget(icon: Icons.swap_horiz, title: '暫無待審核更換申請');
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -584,7 +609,7 @@ class _ContractorHomePageState extends State<ContractorHomePage>
   Widget _buildCompanyChangeList() {
     if (_loadingCompanyChanges) return const Center(child: CircularProgressIndicator());
     if (_companyChangeRequests.isEmpty) {
-      return const Center(child: Text('暫無待審核更換公司申請', style: TextStyle(color: AppTheme.textHint)));
+      return const EmptyStateWidget(icon: Icons.business, title: '暫無待審核更換公司申請');
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),

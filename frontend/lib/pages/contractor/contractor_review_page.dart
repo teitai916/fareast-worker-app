@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
+import 'package:fareast_worker_app/widgets/empty_state_widget.dart';
 
 class ContractorReviewPage extends StatefulWidget {
   const ContractorReviewPage({super.key});
@@ -106,6 +108,7 @@ class _ContractorReviewPageState extends State<ContractorReviewPage>
         reviewRemark: remark,
       );
       if (!mounted) return;
+      HapticFeedback.mediumImpact();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(approved ? '已批准申請' : '已拒絕申請'),
@@ -130,6 +133,7 @@ class _ContractorReviewPageState extends State<ContractorReviewPage>
         reviewRemark: remark,
       );
       if (!mounted) return;
+      HapticFeedback.mediumImpact();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(approved ? '已批准更換地盤' : '已拒絕更換地盤'),
@@ -154,6 +158,7 @@ class _ContractorReviewPageState extends State<ContractorReviewPage>
         reviewRemark: remark,
       );
       if (!mounted) return;
+      HapticFeedback.mediumImpact();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(approved ? '已批准更換公司' : '已拒絕更換公司'),
@@ -474,7 +479,7 @@ class _ContractorReviewPageState extends State<ContractorReviewPage>
   Widget _buildAppList() {
     if (_loadingApps) return const Center(child: CircularProgressIndicator());
     if (_applications.isEmpty) {
-      return const Center(child: Text('暫無待審核申請', style: TextStyle(color: AppTheme.textHint)));
+      return const EmptyStateWidget(icon: Icons.inbox, title: '暫無待審核申請');
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -536,7 +541,7 @@ class _ContractorReviewPageState extends State<ContractorReviewPage>
   Widget _buildChangeList() {
     if (_loadingChanges) return const Center(child: CircularProgressIndicator());
     if (_changeRequests.isEmpty) {
-      return const Center(child: Text('暫無待審核更換申請', style: TextStyle(color: AppTheme.textHint)));
+      return const EmptyStateWidget(icon: Icons.swap_horiz, title: '暫無待審核更換申請');
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -603,7 +608,7 @@ class _ContractorReviewPageState extends State<ContractorReviewPage>
   Widget _buildCompanyChangeList() {
     if (_loadingCompanyChanges) return const Center(child: CircularProgressIndicator());
     if (_companyChangeRequests.isEmpty) {
-      return const Center(child: Text('暫無待審核更換公司申請', style: TextStyle(color: AppTheme.textHint)));
+      return const EmptyStateWidget(icon: Icons.business, title: '暫無待審核更換公司申請');
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),

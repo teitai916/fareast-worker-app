@@ -33,6 +33,10 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Fastlane related
+fastlane/report.xml
+fastlane/test_output/
+
 # Symbolication related
 app.*.symbols
 
