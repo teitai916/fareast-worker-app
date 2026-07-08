@@ -52,7 +52,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 24),
               const Text(
-                '遠東工友通',
+                '遠東工地通',
                 style: TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.bold,
