@@ -1,0 +1,121 @@
+name: iOS Build & TestFlight
+
+on:
+  # 手动触发（最常用）
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: '构建类型'
+        required: true
+        default: 'TestFlight'
+        type: choice
+        options:
+          - 'TestFlight'
+          - 'AdHoc'
+
+  # 推送 tag 时自动构建（可选，按需启用）
+  # push:
+  #   tags:
+  #     - 'v*'
+
+jobs:
+  build:
+    name: Build IPA and Upload to TestFlight
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # ===================== 设置 Flutter =====================
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Verify Flutter version
+        run: flutter --version
+
+      # ===================== 安装 CocoaPods 依赖 =====================
+      - name: Install CocoaPods dependencies
+        working-directory: frontend/ios
+        run: |
+          pod repo update --silent
+          pod install --repo-update
+
+      # ===================== Flutter 构建 =====================
+      - name: Get Flutter packages
+        working-directory: frontend
+        run: flutter pub get
+
+      - name: Build iOS release (prepare .app)
+        working-directory: frontend
+        run: flutter build ios --release --no-codesign
+
+      # ===================== 准备证书和配置文件 (Fastlane Match) =====================
+      - name: Setup Ruby/Bundler
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
+          bundler-cache: true
+
+      - name: Install Fastlane
+        working-directory: frontend
+        run: |
+          gem install fastlane -N --no-document
+
+      - name: Decode Match signing key
+        run: |
+          echo "${{ secrets.MATCH_PASSPHRASE }}" > /dev/null  # passphrase used by fastlane match
+          echo "${{ secrets.MATCH_GIT_PRIVATE_KEY }}" | base64 --decode > /tmp/match_ssh_key
+          chmod 600 /tmp/match_ssh_key
+          # 配置 SSH 以便 fastlane match 从私有仓库拉取证书
+          ssh-add /tmp/match_ssh_key 2>/dev/null || true
+
+      - name: Sync signing certificates (Fastlane Match)
+        working-directory: frontend
+        env:
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          MATCH_KEYCHAIN_NAME: "fastlane_match"
+          MATCH_KEYCHAIN_PASSWORD: "temp_keychain_pass"
+        run: |
+          fastlane match appstore --readonly
+
+      # ===================== 签名并导出 IPA =====================
+      - name: Archive and export IPA
+        working-directory: frontend
+        env:
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_KEYCHAIN_NAME: "fastlane_match"
+          MATCH_KEYCHAIN_PASSWORD: "temp_keychain_pass"
+        run: |
+          fastlane build_and_export
+
+      # ===================== 上传到 App Store Connect / TestFlight =====================
+      - name: Upload to TestFlight
+        working-directory: frontend
+        env:
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+          APP_STORE_CONNECT_API_KEY_IS_KEY_CONTENT_BASE64: true
+        run: |
+          fastlane upload_testflight
+
+      # ===================== 通知 =====================
+      - name: Upload IPA as artifact (备存)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fareast-worker-ipa
+          path: frontend/build/ios/ipa/*.ipa
+          retention-days: 7

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
+import 'package:fareast_worker_app/widgets/app_widgets.dart';
 
 class RegisterPage extends StatefulWidget {
   final String? initialRole;
@@ -32,8 +33,6 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _sendingCode = false;
   bool _obscurePassword = true;
   bool _agreed = false;
-  String? _countdownText;
-  int _countdown = 0;
 
   @override
   void initState() {
@@ -107,26 +106,12 @@ class _RegisterPageState extends State<RegisterPage> {
       await _api.sendSms(phone);
       if (!mounted) return;
       _showMsg('驗證碼已發送到 $phone');
-      _startCountdown();
     } catch (e) {
       if (!mounted) return;
       _showMsg('發送失敗：$e');
     } finally {
       if (mounted) setState(() { _sendingCode = false; });
     }
-  }
-
-  void _startCountdown() {
-    setState(() { _countdown = 60; _countdownText = '60秒'; });
-    Future.doWhile(() async {
-      await Future.delayed(const Duration(seconds: 1));
-      if (!mounted || _countdown <= 0) {
-        if (mounted) setState(() { _countdownText = null; });
-        return false;
-      }
-      setState(() { _countdown--; _countdownText = '$_countdown秒'; });
-      return true;
-    });
   }
 
   Future<void> _register() async {
@@ -254,19 +239,8 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    SizedBox(
-                      width: 110,
-                      child: ElevatedButton(
-                        onPressed: (_sendingCode || _countdown > 0) ? null : _sendCode,
-                        style: ElevatedButton.styleFrom(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text(
-                          _countdownText ?? '獲取驗證碼',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
+                    Center(
+                      child: CodeButton(onPressed: _sendCode, loading: _sendingCode),
                     ),
                   ],
                 ),
@@ -297,7 +271,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 textCapitalization: TextCapitalization.words,
                 decoration: InputDecoration(
                   labelText: '英文姓名 *',
-                  hintText: '護照上的英文姓名',
+                  hintText: '身份證上的英文姓名',
                   prefixIcon: const Icon(Icons.person_outline),
                   counterText: '',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),

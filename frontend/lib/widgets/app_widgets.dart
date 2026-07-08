@@ -134,24 +134,37 @@ class _CodeButtonState extends State<CodeButton> {
 
   @override
   Widget build(BuildContext context) {
-    return TextButton(
-      onPressed: _countdown > 0 || widget.loading ? null : () {
-        widget.onPressed();
-        startCountdown();
-      },
-      child: widget.loading
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Text(
-              _countdown > 0 ? '${_countdown}s' : '獲取驗證碼',
-              style: TextStyle(
-                color: _countdown > 0 ? AppTheme.textHint : AppTheme.primaryColor,
-                fontSize: 14,
+    return SizedBox(
+      height: 36,
+      child: TextButton(
+        onPressed: _countdown > 0 || widget.loading ? null : () {
+          widget.onPressed();
+          startCountdown();
+        },
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: widget.loading
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  _countdown > 0 ? '${_countdown}s' : '獲取驗證碼',
+                  style: TextStyle(
+                    color: _countdown > 0 ? AppTheme.textHint : AppTheme.primaryColor,
+                    fontSize: 14,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.visible,
+                ),
               ),
-            ),
+      ),
     );
   }
 }
