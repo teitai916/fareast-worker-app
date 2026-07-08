@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fareast_worker_app/models/user.dart';
 
@@ -28,30 +29,29 @@ class ApiConfig {
 class TokenManager {
   static String? _token;
   static User? _currentUser;
+  static const _secureStorage = FlutterSecureStorage();
 
   static String? get token => _token;
   static User? get currentUser => _currentUser;
 
   static Future<void> setToken(String? token) async {
     _token = token;
-    final prefs = await SharedPreferences.getInstance();
     if (token != null) {
-      await prefs.setString('auth_token', token);
+      await _secureStorage.write(key: 'auth_token', value: token);
     } else {
-      await prefs.remove('auth_token');
+      await _secureStorage.delete(key: 'auth_token');
     }
   }
 
   static Future<void> setUser(User? user) async {
     _currentUser = user;
+    final prefs = await SharedPreferences.getInstance();
     if (user != null) {
-      final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('user_id', user.id);
       await prefs.setString('user_name', user.name ?? '');
       await prefs.setString('user_phone', user.phone);
       await prefs.setString('user_role', user.role);
     } else {
-      final prefs = await SharedPreferences.getInstance();
       await prefs.remove('user_id');
       await prefs.remove('user_name');
       await prefs.remove('user_phone');
@@ -60,8 +60,8 @@ class TokenManager {
   }
 
   static Future<void> loadFromStorage() async {
+    _token = await _secureStorage.read(key: 'auth_token');
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('auth_token');
     final userId = prefs.getInt('user_id');
     if (userId != null) {
       _currentUser = User(
@@ -180,6 +180,8 @@ class ApiService {
     required String englishName,
     String role = 'WORKER',
     int? companyId,
+    String? birthDate,
+    String countryCode = '+852',
   }) async {
     if (ApiConfig.mockMode) {
       await Future.delayed(const Duration(seconds: 1));
@@ -192,8 +194,10 @@ class ApiService {
       'chineseName': chineseName,
       'englishName': englishName,
       'role': role,
+      'countryCode': countryCode,
     };
     if (companyId != null) body['companyId'] = companyId;
+    if (birthDate != null) body['birthDate'] = birthDate;
     final resp = await _client.post(
       Uri.parse('$baseUrl/auth/register'),
       headers: ApiConfig.headers(),

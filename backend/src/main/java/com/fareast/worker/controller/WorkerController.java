@@ -130,6 +130,9 @@ public class WorkerController {
         m.put("dailyWage", p.getDailyWage());
         m.put("contractAttachment", p.getContractAttachment());
         m.put("blacklistReason", p.getBlacklistReason());
+        m.put("emergencyContactName", p.getEmergencyContactName());
+        m.put("emergencyContactPhone", p.getEmergencyContactPhone());
+        m.put("birthDate", p.getBirthDate() != null ? p.getBirthDate().toString() : null);
         
         // 查詢公司名稱
         if (p.getCurrentCompanyId() != null) {
@@ -204,6 +207,10 @@ public class WorkerController {
             if (dw != null)
                 profile.setDailyWage(new java.math.BigDecimal(dw.toString()));
         }
+        if (body.containsKey("emergencyContactName"))
+            profile.setEmergencyContactName((String) body.get("emergencyContactName"));
+        if (body.containsKey("emergencyContactPhone"))
+            profile.setEmergencyContactPhone((String) body.get("emergencyContactPhone"));
 
         // 驗證證書資料 4 項必填（若前台傳了任何一個證書相關欄位，則全部必填）
         boolean hasSafetyCard = profile.getSafetyCard() != null && !profile.getSafetyCard().trim().isEmpty();

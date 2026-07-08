@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.fareast.worker.model.entity.Company;
 import com.fareast.worker.model.entity.User;
 import com.fareast.worker.repository.CompanyRepository;
+import com.fareast.worker.repository.UserRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,8 +40,15 @@ public class AuthController {
     @Autowired
     private CompanyRepository companyRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
     @PostMapping("/send-sms")
     public ApiResponse<Void> sendSms(@Valid @RequestBody SmsRequest request) {
+        // 检查手机号是否已注册
+        if (userRepository.existsByPhone(request.getPhone())) {
+            return ApiResponse.error(409, "该手机号已注册，请直接登录");
+        }
         smsService.sendVerificationCode(request.getPhone());
         return ApiResponse.success(null);
     }

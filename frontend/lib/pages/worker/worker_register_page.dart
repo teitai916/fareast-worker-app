@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
 import 'package:file_picker/file_picker.dart';
@@ -18,6 +19,8 @@ class _WorkerRegisterPageState extends State<WorkerRegisterPage> {
   final _phoneController = TextEditingController();
   final _safetyCardController = TextEditingController();
   final _workerCertController = TextEditingController();
+  final _emergencyContactNameController = TextEditingController();
+  final _emergencyContactPhoneController = TextEditingController();
   final _api = ApiService();
 
   bool _loading = false;
@@ -42,6 +45,8 @@ class _WorkerRegisterPageState extends State<WorkerRegisterPage> {
     _phoneController.dispose();
     _safetyCardController.dispose();
     _workerCertController.dispose();
+    _emergencyContactNameController.dispose();
+    _emergencyContactPhoneController.dispose();
     super.dispose();
   }
 
@@ -59,6 +64,8 @@ class _WorkerRegisterPageState extends State<WorkerRegisterPage> {
         _safetyCardAttachmentName = _safetyCardAttachmentUrl != null ? '已上傳' : null;
         _workerRegCertAttachmentUrl = data['workerRegCertAttachment'];
         _workerRegCertAttachmentName = _workerRegCertAttachmentUrl != null ? '已上傳' : null;
+        _emergencyContactNameController.text = data['emergencyContactName'] ?? '';
+        _emergencyContactPhoneController.text = data['emergencyContactPhone'] ?? '';
       });
     } catch (e) {
       if (!mounted) return;
@@ -141,6 +148,8 @@ class _WorkerRegisterPageState extends State<WorkerRegisterPage> {
         'safetyCardAttachment': _safetyCardAttachmentUrl,
         'workerRegistrationNum': workerRegNum,
         'workerRegCertAttachment': _workerRegCertAttachmentUrl,
+        'emergencyContactName': _emergencyContactNameController.text.trim(),
+        'emergencyContactPhone': _emergencyContactPhoneController.text.trim(),
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -229,6 +238,56 @@ class _WorkerRegisterPageState extends State<WorkerRegisterPage> {
                               ],
                             ),
                           ),
+                          const SizedBox(height: 12),
+                          // 出生日期（只读）
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF5F5F5),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: Row(
+                              children: [
+                                const SizedBox(
+                                  width: 100,
+                                  child: Text('出生日期', style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
+                                ),
+                                Text(
+                                  _profileData?['birthDate'] != null
+                                      ? '${_profileData!['birthDate']}'
+                                      : '未設置',
+                                  style: const TextStyle(fontSize: 16),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _emergencyContactNameController,
+                            decoration: const InputDecoration(
+                              labelText: '緊急聯絡人（姓名）',
+                              hintText: '非必填',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _emergencyContactPhoneController,
+                            keyboardType: TextInputType.phone,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            decoration: const InputDecoration(
+                              labelText: '緊急聯絡人電話',
+                              hintText: '非必填',
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (v) {
+                              if (v != null && v.isNotEmpty && !RegExp(r'^\d+$').hasMatch(v)) {
+                                return '電話號碼只能包含數字';
+                              }
+                              return null;
+                            },
+                          ),
                         ],
                       ),
                     ),
@@ -250,7 +309,7 @@ class _WorkerRegisterPageState extends State<WorkerRegisterPage> {
                           TextFormField(
                             controller: _safetyCardController,
                             decoration: const InputDecoration(
-                              labelText: '平安卡 (綠卡) *', hintText: '平安卡編號', border: OutlineInputBorder(),
+                              labelText: '平安卡 (綠卡) *', hintText: '強制性基本安全訓練課程 (平安卡)編號', border: OutlineInputBorder(),
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -266,7 +325,7 @@ class _WorkerRegisterPageState extends State<WorkerRegisterPage> {
                           TextFormField(
                             controller: _workerCertController,
                             decoration: const InputDecoration(
-                              labelText: '工人註冊證 *', hintText: '建造業工人註冊證編號', border: OutlineInputBorder(),
+                              labelText: '建造業工人註冊證 *', hintText: '建造業工人註冊證編號', border: OutlineInputBorder(),
                             ),
                           ),
                           const SizedBox(height: 8),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class RegisterPage extends StatefulWidget {
   final String? initialRole;
@@ -34,10 +35,15 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _agreed = false;
   String? _countdownText;
   int _countdown = 0;
+  DateTime? _birthDate;
+  String _countryCode = '+852';
+  static const _hkPhoneLength = 8;
+  static const _cnPhoneLength = 11;
 
   @override
   void initState() {
     super.initState();
+    _restoreCountdown();
     // widget.initialRole 在 initState 時已可用
     if (widget.initialRole == 'CONTRACTOR' || widget.initialRole == 'WORKER') {
       _effectiveRole = widget.initialRole;
@@ -46,6 +52,21 @@ class _RegisterPageState extends State<RegisterPage> {
     // 只有判頭才需要加載公司列表
     if (_selectedRole == 'CONTRACTOR') {
       _loadCompanies();
+    }
+  }
+
+  Future<void> _restoreCountdown() async {
+    final prefs = await SharedPreferences.getInstance();
+    final endTime = prefs.getInt('sms_countdown_end');
+    if (endTime != null) {
+      final remaining = endTime - DateTime.now().millisecondsSinceEpoch;
+      if (remaining > 0) {
+        final seconds = (remaining ~/ 1000) + 1;
+        setState(() { _countdown = seconds; _countdownText = '$seconds秒'; });
+        _runCountdown();
+      } else {
+        prefs.remove('sms_countdown_end');
+      }
     }
   }
 
@@ -98,8 +119,9 @@ class _RegisterPageState extends State<RegisterPage> {
 
   Future<void> _sendCode() async {
     final phone = _phoneController.text.trim();
-    if (phone.isEmpty || phone.length < 8) {
-      _showMsg('請輸入有效的手機號碼');
+    final expectedLength = _countryCode == '+86' ? _cnPhoneLength : _hkPhoneLength;
+    if (phone.isEmpty || phone.length != expectedLength || !RegExp(r'^\d+$').hasMatch(phone)) {
+      _showMsg('请输入${expectedLength}位有效手机号');
       return;
     }
     setState(() { _sendingCode = true; });
@@ -110,23 +132,52 @@ class _RegisterPageState extends State<RegisterPage> {
       _startCountdown();
     } catch (e) {
       if (!mounted) return;
-      _showMsg('發送失敗：$e');
+      final msg = e.toString().replaceAll('Exception: ', '');
+      if (msg.contains('已注册')) {
+        _showMsg(msg);
+      } else {
+        _showMsg('發送失敗：$msg');
+      }
     } finally {
       if (mounted) setState(() { _sendingCode = false; });
     }
   }
 
-  void _startCountdown() {
-    setState(() { _countdown = 60; _countdownText = '60秒'; });
+  void _startCountdown() async {
+    final prefs = await SharedPreferences.getInstance();
+    final endTime = DateTime.now().millisecondsSinceEpoch + 120000;
+    prefs.setInt('sms_countdown_end', endTime);
+    setState(() { _countdown = 120; _countdownText = '120秒'; });
+    _runCountdown();
+  }
+
+  void _runCountdown() {
     Future.doWhile(() async {
       await Future.delayed(const Duration(seconds: 1));
       if (!mounted || _countdown <= 0) {
         if (mounted) setState(() { _countdownText = null; });
+        SharedPreferences.getInstance().then((p) => p.remove('sms_countdown_end'));
         return false;
       }
       setState(() { _countdown--; _countdownText = '$_countdown秒'; });
       return true;
     });
+  }
+
+  Future<void> _selectBirthDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _birthDate ?? DateTime(1980, 1, 1),
+      firstDate: DateTime(1900, 1, 1),
+      lastDate: now,
+      helpText: '選擇出生日期',
+      cancelText: '取消',
+      confirmText: '確定',
+    );
+    if (picked != null && picked != _birthDate) {
+      setState(() => _birthDate = picked);
+    }
   }
 
   Future<void> _register() async {
@@ -137,14 +188,17 @@ class _RegisterPageState extends State<RegisterPage> {
     final pwd = _passwordController.text;
     final confirm = _confirmController.text;
 
-    if (phone.isEmpty || phone.length < 8) {
-      _showMsg('請輸入有效的手機號碼'); return;
+    if (phone.isEmpty || phone.length != (_countryCode == '+86' ? _cnPhoneLength : _hkPhoneLength) || !RegExp(r'^\d+$').hasMatch(phone)) {
+      _showMsg('请输入${_countryCode == '+86' ? _cnPhoneLength : _hkPhoneLength}位有效手机号'); return;
     }
     if (chineseName.isEmpty) {
       _showMsg('請輸入中文姓名'); return;
     }
     if (englishName.isEmpty) {
       _showMsg('請輸入英文姓名'); return;
+    }
+    if (_birthDate == null) {
+      _showMsg('請選擇出生日期'); return;
     }
     if (code.isEmpty || code.length != 6) {
       _showMsg('請輸入6位驗證碼'); return;
@@ -172,6 +226,10 @@ class _RegisterPageState extends State<RegisterPage> {
         englishName: englishName,
         role: _selectedRole,
         companyId: _selectedCompanyId,
+        countryCode: _countryCode,
+        birthDate: _birthDate != null
+            ? '${_birthDate!.year}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}'
+            : null,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -219,18 +277,51 @@ class _RegisterPageState extends State<RegisterPage> {
                   style: TextStyle(color: AppTheme.textSecondary)),
               const SizedBox(height: 28),
 
-              // 手機號碼
-              TextFormField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                maxLength: 11,
-                decoration: InputDecoration(
-                  labelText: '手機號碼 *',
-                  hintText: '香港手機號碼',
-                  prefixIcon: const Icon(Icons.phone_android),
-                  counterText: '',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
+              // 手機號碼（含區號選擇）
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 區號選擇
+                  SizedBox(
+                    width: 100,
+                    child: DropdownButtonFormField<String>(
+                      value: _countryCode,
+                      decoration: InputDecoration(
+                        labelText: '區號',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: '+852', child: Text('+852')),
+                        DropdownMenuItem(value: '+86', child: Text('+86')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() {
+                            _countryCode = v;
+                            _phoneController.clear();
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // 手機號碼輸入
+                  Expanded(
+                    child: TextFormField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      maxLength: _countryCode == '+86' ? 11 : 8,
+                      decoration: InputDecoration(
+                        labelText: '手機號碼 *',
+                        hintText: _countryCode == '+86' ? '內地手機號碼' : '香港手機號碼',
+                        prefixIcon: const Icon(Icons.phone_android),
+                        counterText: '',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
 
@@ -301,6 +392,38 @@ class _RegisterPageState extends State<RegisterPage> {
                   prefixIcon: const Icon(Icons.person_outline),
                   counterText: '',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // 出生日期
+              Text('出生日期 *', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.textSecondary)),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: _selectBirthDate,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade400),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.calendar_today, color: AppTheme.textHint, size: 20),
+                      const SizedBox(width: 12),
+                      Text(
+                        _birthDate != null
+                            ? '${_birthDate!.year}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}'
+                            : '請選擇出生日期',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: _birthDate != null ? AppTheme.textPrimary : AppTheme.textHint,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 16),

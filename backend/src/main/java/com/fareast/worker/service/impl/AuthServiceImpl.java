@@ -25,6 +25,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -73,6 +74,7 @@ public class AuthServiceImpl implements AuthService {
         // Create user
         User.UserBuilder userBuilder = User.builder()
                 .phone(request.getPhone())
+                .countryCode(request.getCountryCode() != null ? request.getCountryCode() : "+852")
                 .password(passwordEncoder.encode(request.getPassword()))
                 .name(request.getChineseName())   // 中文姓名
                 .englishName(request.getEnglishName()) // 英文姓名
@@ -101,13 +103,25 @@ public class AuthServiceImpl implements AuthService {
         // 只有工人角色才创建 WorkerProfile
         if (parseRole(request.getRole()) == UserRole.WORKER) {
             String workerNumber = generateWorkerNumber();
-            WorkerProfile profile = WorkerProfile.builder()
+            WorkerProfile.WorkerProfileBuilder profileBuilder = WorkerProfile.builder()
                     .userId(user.getId())
+                    .chineseName(request.getChineseName())
+                    .englishName(request.getEnglishName())
                     .workerNumber(workerNumber)
                     .blacklisted(false)
                     .cardLocked(false)
-                    .faceRegistered(false)
-                    .build();
+                    .faceRegistered(false);
+
+            // 出生日期（工人注册时必填）
+            if (request.getBirthDate() != null && !request.getBirthDate().isBlank()) {
+                try {
+                    profileBuilder.birthDate(LocalDate.parse(request.getBirthDate()));
+                } catch (Exception e) {
+                    throw new BusinessException(400, "出生日期格式不正確，請使用 yyyy-MM-dd");
+                }
+            }
+
+            WorkerProfile profile = profileBuilder.build();
             workerProfileRepository.save(profile);
             log.info("工人資料已創建: userId={}, workerNumber={}", user.getId(), workerNumber);
         } else {

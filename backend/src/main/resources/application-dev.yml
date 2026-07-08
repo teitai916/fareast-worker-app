@@ -36,7 +36,7 @@ spring:
 
 # JWT 密钥（开发）
 jwt:
-  secret: YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY3ODkwYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0
+  secret: ${JWT_SECRET:JAVKcS00BUt1wjzV4PswrYvUagCuphEVgJilbX9fdNbIG2pY8CiVtjVmh3LOUITw2sPehR8ivb6zQYn8KHIyog==}
   expiration: 7776000000   # 90天
   refresh-expiration: 2592000000   # 30天
 
