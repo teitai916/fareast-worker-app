@@ -153,6 +153,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "10443:10443"
     volumes:
       # Nginx 配置
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
@@ -161,6 +162,8 @@ services:
       - ./nginx/ssl:/etc/nginx/ssl:ro
       # Let's Encrypt ACME 验证
       - certbot-webroot:/var/www/certbot
+      # 静态页面（API 测试面板等）
+      - ./nginx/html:/usr/share/nginx/html:ro
     networks:
       - fareast-net
     deploy:

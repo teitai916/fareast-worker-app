@@ -3,30 +3,54 @@
 ## 架构概览
 
 ```
-                     ┌──────────────────────────────┐
-    手机端           │           Docker 环境            │
-  ┌───────────┐      │  ┌─────────────────────────┐  │
-  │ Flutter   │ HTTPS│  │  Nginx :443 (TLS终止)   │  │
-  │ iOS/Android│─────▶│  │  反向代理 + 安全头       │  │
-  └───────────┘      │  └──────────┬──────────────┘  │
-                     │             │ (内网)            │
-                     │  ┌──────────▼──────────────┐  │
-                     │  │  Backend :8080          │  │
-                     │  │  Spring Boot            │  │
-                     │  └───┬─────────┬───────────┘  │
-                     │      │         │               │
-                     │  ┌───▼──┐ ┌───▼───┐           │
-                     │  │ PG   │ │ Redis  │           │
-                     │  │ :5432│ │ :6379  │           │
-                     │  └──────┘ └───────┘           │
-                     └──────────────────────────────┘
+                     ┌─────────────────────────────────────┐
+    客户端             │              Docker 环境               │
+  ┌───────────┐       │  ┌───────────────────────────────┐  │
+  │ Flutter   │ HTTPS │  │  Nginx                        │  │
+  │ App       │───────▶│  │  :80 (→HTTPS)                │  │
+  │ (Android) │       │  │  :443 / :10443 (TLS)          │  │
+  ├───────────┤       │  │                               │  │
+  │ 浏览器     │ HTTP  │  │  /         → Flutter Web SPA  │  │
+  │ (内网测试) │──────▶│  │  /api/     → 后端代理          │  │
+  └───────────┘       │  │  /ws/      → WebSocket        │  │
+                      │  └──────────┬────────────────────┘  │
+                      │             │ (内部网络 fareast-net) │
+                      │  ┌──────────▼────────────────────┐  │
+                      │  │  Backend :8080                │  │
+                      │  │  Spring Boot 3.2 / Java 17    │  │
+                      │  └───┬─────────────┬─────────────┘  │
+                      │      │             │                │
+                      │  ┌───▼──────┐ ┌───▼──────┐         │
+                      │  │PostgreSQL│ │  Redis    │         │
+                      │  │ :5432    │ │  :6379    │         │
+                      │  └──────────┘ └──────────┘         │
+                      │                                     │
+                      │  ┌──────────────────────────────┐  │
+                      │  │  Certbot (SSL证书自动续期)    │  │
+                      │  └──────────────────────────────┘  │
+                      └─────────────────────────────────────┘
 ```
 
-5 个 Docker 容器：`nginx` + `certbot` + `backend` + `postgres:15` + `redis:7`
+### 5 个 Docker 容器
 
-- **Nginx**: 唯一对外端口（80/443），TLS 终止，反向代理后端
-- **Certbot**: 自动续期 Let's Encrypt 证书（每 12 小时检查）
-- **Backend**: 仅内网暴露，不直接对外
+| 容器 | 镜像 | 对公端口 | 用途 |
+|------|------|----------|------|
+| **nginx** | nginx:1.27-alpine | 80, 443, **10443** | TLS 终止 + 反向代理 + Flutter Web 托管 |
+| **certbot** | certbot/certbot | — | Let's Encrypt 自动续期（每 12h） |
+| **backend** | fareast-backend (自建) | — (仅内网) | Spring Boot REST API |
+| **postgres** | postgres:15-alpine | 5432 | 主数据库 |
+| **redis** | redis:7-alpine | 6379 | 缓存 + 短信验证码 |
+
+### Nginx 路由表
+
+| 路径 | HTTP (80) | HTTPS (443/10443) | 说明 |
+|------|-----------|-------------------|------|
+| `/` | Flutter Web 前端 | Flutter Web 前端 | SPA fallback → `index.html` |
+| `/api/` | 代理到 backend | 代理到 backend | REST API |
+| `/ws/` | — | WebSocket 代理 | 实时通信 |
+| `/uploads/` | — | 代理 + 7d 缓存 | 文件上传 |
+| `/health` | — | 健康检查代理 | 跳过日志 |
+| `/.well-known/` | ACME 验证 | ACME 验证 | Let's Encrypt |
 
 ---
 
@@ -214,19 +238,92 @@ tar -xzf uploads_backup_20250629.tar.gz -C /path/to/restore
 
 ## Flutter App 配置
 
-后端部署完成后，修改 Flutter 的 API 地址：
+### 生产构建（Google Play App Bundle）
 
-1. 打开 `frontend/lib/config/api_config.dart`
-2. 将 `baseUrlProd` 或 `defaultValue` 改为服务器地址：
-
-```dart
-// 方案 A: 修改常量
-static const String baseUrlProd = 'https://fsapp.fefacade.com/api/v1';
-
-// 方案 B: 编译时注入（推荐）
-flutter build apk --release \
+```bash
+cd frontend
+flutter build appbundle --release \
   --dart-define=API_BASE_URL=https://fsapp.fefacade.com/api/v1
 ```
+
+产物：`build/app/outputs/bundle/release/app-release.aab`
+
+### 生产构建（直接安装 APK）
+
+```bash
+flutter build apk --release \
+  --dart-define=API_BASE_URL=https://fsapp.fefacade.com/api/v1 \
+  --target-platform android-arm64
+```
+
+### Flutter Web 构建（内网测试用）
+
+```bash
+flutter build web \
+  --dart-define=API_BASE_URL=http://10.106.8.165/api/v1
+```
+
+产物 `build/web/` 复制到 `deploy/nginx/html/`，重启 Nginx 后即可通过浏览器访问。
+
+### 内网测试 APK（无需 SSL 证书）
+
+内网测试时为了避免自签名证书问题，`api_service.dart` 中使用了 `IOClient` + `badCertificateCallback`：
+
+```dart
+// api_service.dart 第 93-97 行
+final http.Client _client = IOClient(HttpClient()
+  ..badCertificateCallback = (cert, host, port) =>
+      host == 'fsapp.fefacade.com' || host == '10.106.8.165');
+```
+
+> ⚠️ 正式上线前需删除此回调，恢复 `http.Client()`。
+
+---
+
+## 开发调试
+
+### SMS 验证码查看
+
+验证码通过 `log.warn` 输出到后端日志：
+
+```bash
+# 发送验证码
+curl -k https://localhost/api/v1/auth/send-sms \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"13800000011"}'
+
+# 查看验证码（或在 docker compose logs -f backend 中观察）
+docker compose logs backend --tail=10 | grep "短信验证码"
+```
+
+> 验证码 5 分钟有效，验证后自动从 Redis 删除。
+
+### 重置用户密码
+
+```bash
+# 生成 BCrypt 哈希（需 Python bcrypt）
+HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw(b'新密码', bcrypt.gensalt(rounds=10)).decode())")
+
+# 更新数据库
+docker compose exec postgres psql -U fareast -d fareast_worker \
+  -c "UPDATE users SET password='$HASH' WHERE phone='手机号';"
+```
+
+### API 测试面板
+
+浏览器打开 `http://10.106.8.165/`（HTTP）或 `https://fsapp.fefacade.com/`（HTTPS）可直接使用内置的 API 测试面板。
+
+---
+
+## 端口说明
+
+| 端口 | 协议 | 用途 | 外部访问 |
+|------|------|------|----------|
+| 80 | HTTP | Flutter Web + API（内网测试） | ✅ |
+| 443 | HTTPS | TLS 全功能 | ✅ |
+| 10443 | HTTPS | 备用 TLS | ✅ |
+| 5432 | TCP | PostgreSQL | ⚠️ 限制 |
+| 6379 | TCP | Redis | ⚠️ 限制 |
 
 ---
 
@@ -320,17 +417,36 @@ docker stats fareast-backend fareast-postgres fareast-redis
 
 ```
 deploy/
-├── docker-compose.yml    # 容器编排（五服务 + 网络 + 卷）
-├── .env                   # 环境变量（敏感，已 gitignore）
-├── .env.example           # 环境变量模板（可提交 Git）
+├── docker-compose.yml         # 容器编排（五服务 + 网络 + 卷）
+├── .env                        # 环境变量（敏感，已 gitignore）
+├── .env.example                # 环境变量模板
 ├── init-scripts/
 │   └── 01-init-extensions.sql  # 数据库扩展初始化
 ├── nginx/
-│   ├── nginx.conf         # Nginx 主配置
-│   ├── default.conf       # 站点配置（反向代理 + TLS）
-│   └── ssl/
-│       └── .gitkeep       # 证书占位目录
+│   ├── nginx.conf              # Nginx 主配置
+│   ├── default.conf             # 站点配置（路由 + TLS + 多端口）
+│   ├── ssl/                     # SSL 证书目录
+│   │   ├── fullchain.pem
+│   │   └── privkey.pem
+│   └── html/                    # Flutter Web 前端 + 测试页
+│       └── index.html           # API 测试面板
 ├── certbot/
-│   └── init-letsencrypt.sh # Let's Encrypt 初始化脚本
-└── README.md              # 本文档
+│   └── init-letsencrypt.sh     # Let's Encrypt 初始化脚本
+└── README.md                   # 本文档
+
+backend/
+├── Dockerfile                   # 多阶段构建（Maven → JRE）
+├── .dockerignore
+├── pom.xml
+└── src/
+
+frontend/
+├── lib/
+│   ├── config/api_config.dart   # API 地址配置
+│   └── services/api_service.dart # HTTP 客户端（含 SSL 回调）
+└── android/
+    └── app/src/main/
+        ├── AndroidManifest.xml   # networkSecurityConfig 引用
+        └── res/xml/
+            └── network_security_config.xml
 ```

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>遠東工友 API 測試面板</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;min-height:100vh;padding:20px}
+.container{max-width:640px;margin:0 auto}
+h1{color:#1a1a2e;font-size:22px;margin-bottom:6px}
+.sub{color:#888;font-size:13px;margin-bottom:20px}
+.card{background:#fff;border-radius:10px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+.card h2{font-size:15px;color:#333;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #eee}
+.row{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.row input{flex:1;min-width:120px;padding:10px 14px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px;outline:none}
+.row input:focus{border-color:#1677ff;box-shadow:0 0 0 2px rgba(22,119,255,0.1)}
+.btn{padding:10px 20px;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-weight:500;transition:all .2s}
+.btn-primary{background:#1677ff;color:#fff}
+.btn-primary:hover{background:#4096ff}
+.btn-success{background:#52c41a;color:#fff}
+.btn-success:hover{background:#73d13d}
+.btn-warning{background:#fa8c16;color:#fff}
+.btn-warning:hover{background:#ffa940}
+.btn-sm{width:auto;white-space:nowrap}
+.result{background:#1a1a2e;color:#a6e22e;padding:14px;border-radius:6px;font-family:'Fira Code',monospace;font-size:13px;white-space:pre-wrap;word-break:break-all;max-height:400px;overflow-y:auto;margin-top:10px}
+.status{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.status-up{background:#52c41a}
+.status-down{background:#ff4d4f}
+.status-checking{background:#fa8c16}
+.tabs{display:flex;gap:0;margin-bottom:0}
+.tab{padding:8px 16px;border:1px solid #d9d9d9;background:#fafafa;cursor:pointer;font-size:13px;border-radius:6px 6px 0 0;margin-right:-1px}
+.tab.active{background:#fff;border-bottom-color:#fff;font-weight:600}
+.note{font-size:12px;color:#999;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>遠東工友 API 測試面板</h1>
+<p class="sub">當前連接：<span id="apiBase" style="color:#1677ff"></span></p>
+
+<!-- 登入 -->
+<div class="card">
+<h2>登入</h2>
+<div class="row">
+<input id="loginPhone" placeholder="手機號" value="13800000011">
+<input id="loginPassword" type="password" placeholder="密碼" value="123456">
+</div>
+<button class="btn btn-primary" onclick="doLogin()">登入</button>
+<button class="btn btn-warning btn-sm" onclick="doLogin('13800000012')" style="margin-left:6px">13800000012 登入</button>
+<button class="btn btn-warning btn-sm" onclick="doLogin('13800000013')" style="margin-left:6px">13800000013 登入</button>
+<div id="loginResult" class="result" style="display:none"></div>
+</div>
+
+<!-- 驗證碼 -->
+<div class="card">
+<h2>發送驗證碼（SMS）</h2>
+<div class="row">
+<input id="smsPhone" placeholder="手機號" value="13800000011">
+<button class="btn btn-success" onclick="sendSms()">發送驗證碼</button>
+</div>
+<p class="note">驗證碼會出現在後端日誌中（docker compose logs -f backend）</p>
+<div id="smsResult" class="result" style="display:none"></div>
+</div>
+
+<!-- 健康檢查 -->
+<div class="card">
+<h2>服務狀態</h2>
+<button class="btn btn-primary" onclick="checkHealth()">檢查服務健康狀態</button>
+<div id="healthResult" class="result" style="display:none"></div>
+</div>
+
+</div>
+
+<script>
+const base = location.protocol + '//' + location.host + '/api/v1';
+document.getElementById('apiBase').textContent = base;
+
+function showResult(id, data) {
+    const el = document.getElementById(id);
+    el.style.display = 'block';
+    el.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+}
+
+async function request(method, path, body) {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    try {
+        const res = await fetch(base + path, opts);
+        const json = await res.json();
+        return { status: res.status, data: json };
+    } catch (e) {
+        return { error: e.message };
+    }
+}
+
+async function doLogin(phone) {
+    const p = phone || document.getElementById('loginPhone').value;
+    const pw = document.getElementById('loginPassword').value;
+    const r = await request('POST', '/auth/login', { phone: p, password: pw });
+    if (r.data && r.data.code === 200) {
+        showResult('loginResult', '✅ 登入成功\n用戶: ' + r.data.data.user.name + '\n角色: ' + r.data.data.user.role + '\nToken: ' + r.data.data.token);
+        localStorage.setItem('token', r.data.data.token);
+    } else {
+        showResult('loginResult', '❌ 登入失敗\n' + JSON.stringify(r));
+    }
+}
+
+async function sendSms() {
+    const phone = document.getElementById('smsPhone').value;
+    showResult('smsResult', '發送中...');
+    const r = await request('POST', '/auth/send-sms', { phone });
+    showResult('smsResult', '✅ 已發送\n請在後端日誌查看驗證碼\n' + JSON.stringify(r, null, 2));
+}
+
+async function checkHealth() {
+    showResult('healthResult', '檢查中...');
+    const opts = { method: 'GET', headers: { 'Content-Type': 'application/json' } };
+    localStorage.getItem('token');
+    try {
+        const res = await fetch('/api/v1/actuator/health', opts);
+        const json = await res.json();
+        const status = json.status === 'UP' ? '✅' : '❌';
+        showResult('healthResult', status + ' 整體: ' + json.status + '\n\n' + JSON.stringify(json.components, null, 2));
+    } catch (e) {
+        showResult('healthResult', '❌ 無法連接: ' + e.message);
+    }
+}
+</script>
+</body>
+</html>
