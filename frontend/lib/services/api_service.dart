@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fareast_worker_app/models/user.dart';
 
@@ -88,7 +90,11 @@ class TokenManager {
 
 /// API 服務
 class ApiService {
-  final http.Client _client = http.Client();
+  // 自定义 HttpClient（内部测试：允许自签名 SSL 证书）
+  // 正式上线前需改回 http.Client() 并移除此回调
+  final http.Client _client = IOClient(HttpClient()
+    ..badCertificateCallback = (cert, host, port) =>
+        host == 'fsapp.fefacade.com' || host == '10.106.8.165');
 
   String get baseUrl => ApiConfig.baseUrl;
   String? get token => TokenManager.token;
@@ -742,7 +748,7 @@ class ApiService {
     request.fields['folder'] = folder;
     request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
 
-    final streamedResp = await request.send();
+    final streamedResp = await _client.send(request);
     final resp = await http.Response.fromStream(streamedResp);
     _handleError(resp);
     final data = jsonDecode(resp.body)['data'];
@@ -777,9 +783,8 @@ class ApiService {
       if (dailySalary != null) request.fields['dailySalary'] = dailySalary.toString();
       request.files.add(http.MultipartFile.fromBytes('contractAttachment', contractFileBytes, filename: contractFileName));
 
-      final streamedResp = await request.send();
-      final resp = await http.Response.fromStream(streamedResp);
-      _handleError(resp);
+      final streamedResp = await _client.send(request);
+      final resp = await http.Response.fromStream(streamedResp);      _handleError(resp);
     } else {
       // 無文件時，使用 JSON（避免 multipart 的 charset 問題）
       final resp = await _client.post(

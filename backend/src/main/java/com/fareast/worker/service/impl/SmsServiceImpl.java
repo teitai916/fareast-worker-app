@@ -22,7 +22,7 @@ public class SmsServiceImpl implements SmsService {
     @Override
     public void sendSms(String phone) {
         // Mock implementation: just log the SMS sending
-        log.info("【发送短信】手机号: {}，內容: 您的驗證碼為: 123456（模擬）", phone);
+        log.warn("【发送短信】手机号: {}，內容: 您的驗證碼為: 123456（模擬）", phone);
     }
 
     @Override
@@ -33,7 +33,7 @@ public class SmsServiceImpl implements SmsService {
         redisTemplate.opsForValue().set(key, code, CODE_TTL, TimeUnit.MINUTES);
 
         // In production this would call the Aliyun SMS API
-        log.info("【短信验证码】手机号: {}, 验证码: {}, TTL: {}分钟", phone, code, CODE_TTL);
+        log.warn("【短信验证码】手机号: {}, 验证码: {}, TTL: {}分钟", phone, code, CODE_TTL);
 
         return true;
     }
@@ -52,7 +52,7 @@ public class SmsServiceImpl implements SmsService {
         if (matched) {
             // Code verified – delete it to prevent replay
             redisTemplate.delete(key);
-            log.info("验证码校验成功: {}", phone);
+            log.warn("验证码校验成功: {}", phone);
         } else {
             log.warn("验证码错误: {}", phone);
         }

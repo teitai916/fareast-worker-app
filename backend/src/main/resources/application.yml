@@ -9,7 +9,16 @@ spring:
   application:
     name: fareast-worker-app
   profiles:
-    active: dev
+    # 默认不激活任何 profile，由环境变量 SPRING_PROFILES_ACTIVE 控制
+    # 本地开发: 在 IDE 中设置 SPRING_PROFILES_ACTIVE=dev
+    # Docker: docker-compose.yml 中已设置 SPRING_PROFILES_ACTIVE=docker
+    active: ${SPRING_PROFILES_ACTIVE:}
+
+  # Redis 基础配置（会被 profile 或 env var 覆盖）
+  redis:
+    host: ${SPRING_REDIS_HOST:redis}
+    port: 6379
+    password: ${SPRING_REDIS_PASSWORD:}
 
   jpa:
     hibernate:

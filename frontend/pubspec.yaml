@@ -1,7 +1,7 @@
 name: fareast_worker_app
 description: 遠東工友通 - 香港建築工地工人安全管理平台，由遠東幕牆打造
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
@@ -54,6 +54,9 @@ dependencies:
 
   # Lottie animations
   lottie: ^3.1.0
+
+  # App version info
+  package_info_plus: ^8.0.0
 
   # App shortcuts (long-press icon quick actions)
   quick_actions: ^1.1.0

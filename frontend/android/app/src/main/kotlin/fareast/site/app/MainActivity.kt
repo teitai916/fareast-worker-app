@@ -1,4 +1,4 @@
-package com.fareast.fareast_worker_app
+package fareast.site.app
 
 import io.flutter.embedding.android.FlutterActivity
 

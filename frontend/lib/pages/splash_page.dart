@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
 import 'package:fareast_worker_app/services/shortcut_service.dart';
+import 'package:fareast_worker_app/services/update_service.dart';
+import 'package:fareast_worker_app/pages/update_page.dart';
 import 'package:fareast_worker_app/pages/auth/login_page.dart';
 import 'package:fareast_worker_app/pages/worker/worker_home_page.dart';
 import 'package:fareast_worker_app/pages/contractor/contractor_home_page.dart';
@@ -59,7 +61,7 @@ class _SplashPageState extends State<SplashPage>
     await Future.delayed(const Duration(milliseconds: 1500));
 
     if (token == null || token.isEmpty) {
-      ShortcutService.setupForRole(null); // 清除快捷操作
+      ShortcutService.setupForRole(null);
       _go(const LoginPage());
       return;
     }
@@ -70,8 +72,18 @@ class _SplashPageState extends State<SplashPage>
       await TokenManager.setUser(user);
       final role = user.role;
 
-      // 根据角色设置快捷操作
       ShortcutService.setupForRole(role);
+
+      // 版本检测（登录成功后）
+      final updateResult = await UpdateService.checkUpdate();
+      if (updateResult != null && updateResult.hasNewVersion) {
+        if (!mounted) return;
+        await UpdateHelper.show(context, updateResult);
+        // 如果是强制更新，_ForceUpdatePage 已经 push replacement，不需要继续
+        if (updateResult.needForceUpdate) return;
+      }
+
+      if (!mounted) return;
 
       if (role == 'WORKER') {
         _go(const WorkerHomePage());
@@ -84,7 +96,8 @@ class _SplashPageState extends State<SplashPage>
       }
     } catch (e) {
       await TokenManager.clear();
-      ShortcutService.setupForRole(null); // 清除快捷操作
+      ShortcutService.setupForRole(null);
+      if (!mounted) return;
       _go(const LoginPage());
     }
   }
