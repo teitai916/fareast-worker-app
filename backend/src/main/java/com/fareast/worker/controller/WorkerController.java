@@ -45,6 +45,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.http.MediaType;
 
@@ -53,6 +54,17 @@ import org.springframework.http.MediaType;
 @RequestMapping("/worker")
 @PreAuthorize("hasRole('WORKER')")
 public class WorkerController {
+
+    /** 允许上传的文件扩展名 */
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "pdf");
+
+    /** 允许的 MIME 类型（防扩展名伪造） */
+    private static final Map<String, String> ALLOWED_MIME_TYPES = Map.of(
+        "jpg", "image/jpeg",
+        "jpeg", "image/jpeg",
+        "png", "image/png",
+        "pdf", "application/pdf"
+    );
 
     @Autowired
     private WorkerService workerService;
@@ -672,7 +684,22 @@ public class WorkerController {
         String contractAttachment = null;
         String contractAttachmentName = null;
         if (contractFile != null && !contractFile.isEmpty()) {
-            contractAttachmentName = contractFile.getOriginalFilename();
+            // 文件类型白名单校验（与 UploadController 一致）
+            String originalFilename = contractFile.getOriginalFilename();
+            String ext = "";
+            if (originalFilename != null && originalFilename.contains(".")) {
+                ext = originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase();
+            }
+            if (ext.isEmpty() || !ALLOWED_EXTENSIONS.contains(ext)) {
+                throw new BusinessException(400, "不支持的文件格式，仅允许上传 PDF、JPG、PNG 文件");
+            }
+            String expectedMime = ALLOWED_MIME_TYPES.get(ext);
+            String actualMime = contractFile.getContentType();
+            if (actualMime != null && !expectedMime.equals(actualMime)) {
+                throw new BusinessException(400, "文件内容与扩展名不匹配，仅允许上传 PDF、JPG、PNG 文件");
+            }
+
+            contractAttachmentName = originalFilename;
             try {
                 String uploadDir = System.getProperty("user.dir") + "/uploads/contracts/";
                 java.io.File dir = new java.io.File(uploadDir);

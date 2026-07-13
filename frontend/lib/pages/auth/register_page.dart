@@ -128,16 +128,11 @@ class _RegisterPageState extends State<RegisterPage> {
     try {
       await _api.sendSms(phone);
       if (!mounted) return;
-      _showMsg('驗證碼已發送到 $phone');
-      _startCountdown();
+      _showMsg('短信驗證碼已發送到您註冊的手機號');
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().replaceAll('Exception: ', '');
-      if (msg.contains('已注册')) {
-        _showMsg(msg);
-      } else {
-        _showMsg('發送失敗：$msg');
-      }
+      _showMsg(msg);
     } finally {
       if (mounted) setState(() { _sendingCode = false; });
     }

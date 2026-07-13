@@ -16,6 +16,7 @@ import com.fareast.worker.service.AuthService;
 import com.fareast.worker.service.SmsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -31,6 +32,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -56,6 +58,9 @@ public class AuthServiceImpl implements AuthService {
 
     @Autowired
     private CompanyRepository companyRepository;
+
+    @Autowired
+    private RedisTemplate<String, String> redisTemplate;
 
     @Override
     @Transactional
@@ -139,14 +144,33 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public Map<String, Object> login(LoginRequest request) {
+        // 暴力破解防护：检查失败计数
+        String failKey = "login:fail:" + request.getPhone();
+        String failCountStr = redisTemplate.opsForValue().get(failKey);
+        int failCount = failCountStr != null ? Integer.parseInt(failCountStr) : 0;
+
+        if (failCount >= 5) {
+            Long ttl = redisTemplate.getExpire(failKey, TimeUnit.SECONDS);
+            long remainMin = Math.max(1, (ttl != null ? ttl : 1800) / 60);
+            throw new BusinessException(429, "登录尝试次数过多，请" + remainMin + "分钟后重试");
+        }
+
         // Find user
         User user = userRepository.findByPhone(request.getPhone())
-                .orElseThrow(() -> new BusinessException(400, "手機號碼未註冊"));
+                .orElseThrow(() -> {
+                    // 用户不存在也计入失败
+                    recordLoginFail(failKey);
+                    return new BusinessException(400, "手機號碼未註冊");
+                });
 
         // Verify password
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            recordLoginFail(failKey);
             throw new BusinessException(401, "密碼錯誤");
         }
+
+        // 登录成功，清除失败计数
+        redisTemplate.delete(failKey);
 
         // Check status
         if (user.getStatus() == UserStatus.DISABLED) {
@@ -169,6 +193,15 @@ public class AuthServiceImpl implements AuthService {
         result.put("user", user);
         result.put("token", token);
         return result;
+    }
+
+    /**
+     * 记录登录失败次数，30分钟内连续5次失败后锁定
+     */
+    private void recordLoginFail(String failKey) {
+        String failCountStr = redisTemplate.opsForValue().get(failKey);
+        int count = failCountStr != null ? Integer.parseInt(failCountStr) : 0;
+        redisTemplate.opsForValue().set(failKey, String.valueOf(count + 1), 30, TimeUnit.MINUTES);
     }
 
     @Override

@@ -1,15 +1,15 @@
 /// 远东工友App - API配置
 class ApiConfig {
-  /// 从 --dart-define=API_BASE_URL=xxx 读取，默认使用测试环境
+  /// 从 --dart-define=API_BASE_URL=xxx 读取，默认使用 HTTPS 生产环境
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.106.0.242:8080/api/v1',
+    defaultValue: 'https://fsapp.fefacade.com/api/v1',
   );
 
-  // 测试环境 (局域网)
-  static const String baseUrlDev = 'http://10.106.0.242:8080/api/v1';
+  // 本机开发环境
+  static const String baseUrlDev = 'http://localhost:8080/api/v1';
 
-  // 生产环境
+  // 生产环境（HTTPS）
   static const String baseUrlProd = 'https://fsapp.fefacade.com/api/v1';
 
   // API超时配置

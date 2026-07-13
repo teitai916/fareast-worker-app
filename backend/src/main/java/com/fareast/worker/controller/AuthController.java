@@ -45,11 +45,10 @@ public class AuthController {
 
     @PostMapping("/send-sms")
     public ApiResponse<Void> sendSms(@Valid @RequestBody SmsRequest request) {
-        // 检查手机号是否已注册
-        if (userRepository.existsByPhone(request.getPhone())) {
-            return ApiResponse.error(409, "该手机号已注册，请直接登录");
+        // 仅未注册的手机号才发送验证码，已注册也不提示差异（防手机号枚举）
+        if (!userRepository.existsByPhone(request.getPhone())) {
+            smsService.sendVerificationCode(request.getPhone());
         }
-        smsService.sendVerificationCode(request.getPhone());
         return ApiResponse.success(null);
     }
 
