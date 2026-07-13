@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/config/theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AppTextField extends StatelessWidget {
   final TextEditingController controller;
@@ -120,16 +121,48 @@ class CodeButton extends StatefulWidget {
 
 class _CodeButtonState extends State<CodeButton> {
   int _countdown = 0;
+  static const String _prefsKey = 'sms_countdown_end';
+  static const int _countdownSeconds = 120;
 
-  void startCountdown() {
-    if (_countdown > 0) return;
-    setState(() => _countdown = 60);
+  @override
+  void initState() {
+    super.initState();
+    _restoreCountdown();
+  }
+
+  Future<void> _restoreCountdown() async {
+    final prefs = await SharedPreferences.getInstance();
+    final endTime = prefs.getInt(_prefsKey);
+    if (endTime != null) {
+      final remaining = endTime - DateTime.now().millisecondsSinceEpoch;
+      if (remaining > 0) {
+        setState(() => _countdown = (remaining ~/ 1000) + 1);
+        _runCountdown();
+      } else {
+        prefs.remove(_prefsKey);
+      }
+    }
+  }
+
+  void _runCountdown() {
     Future.doWhile(() async {
       await Future.delayed(const Duration(seconds: 1));
       if (!mounted) return false;
       setState(() => _countdown--);
-      return _countdown > 0;
+      if (_countdown <= 0) {
+        SharedPreferences.getInstance().then((p) => p.remove(_prefsKey));
+        return false;
+      }
+      return true;
     });
+  }
+
+  void startCountdown() {
+    if (_countdown > 0) return;
+    final endTime = DateTime.now().millisecondsSinceEpoch + _countdownSeconds * 1000;
+    SharedPreferences.getInstance().then((p) => p.setInt(_prefsKey, endTime));
+    setState(() => _countdown = _countdownSeconds);
+    _runCountdown();
   }
 
   @override

@@ -1,5 +1,6 @@
 package com.fareast.worker.controller;
 
+import com.fareast.worker.exception.BusinessException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +14,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -21,6 +23,17 @@ public class UploadController {
 
     @Value("${file.upload-dir}")
     private String uploadDir;
+
+    /** 允许上传的文件扩展名 */
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "pdf");
+
+    /** 允许的 MIME 类型（防扩展名伪造） */
+    private static final Map<String, String> ALLOWED_MIME_TYPES = Map.of(
+        "jpg", "image/jpeg",
+        "jpeg", "image/jpeg",
+        "png", "image/png",
+        "pdf", "application/pdf"
+    );
 
     /**
      * 测试端点 - 不需要文件上传
@@ -58,6 +71,21 @@ public class UploadController {
             return ResponseEntity.badRequest().body(error);
         }
 
+        // 文件类型白名单校验
+        String originalFilename = file.getOriginalFilename();
+        String ext = "";
+        if (originalFilename != null && originalFilename.contains(".")) {
+            ext = originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase();
+        }
+        if (ext.isEmpty() || !ALLOWED_EXTENSIONS.contains(ext)) {
+            throw new BusinessException(400, "不支持的文件格式，仅允许上传 PDF、JPG、PNG 文件");
+        }
+        String expectedMime = ALLOWED_MIME_TYPES.get(ext);
+        String actualMime = file.getContentType();
+        if (actualMime != null && !expectedMime.equals(actualMime)) {
+            throw new BusinessException(400, "文件内容与扩展名不匹配，仅允许上传 PDF、JPG、PNG 文件");
+        }
+
         try {
             // 1. 确保上传目录存在
             Path uploadPath = Paths.get(uploadDir, folder);
@@ -66,7 +94,6 @@ public class UploadController {
             }
 
             // 2. 生成唯一文件名（保留原始文件名）
-            String originalFilename = file.getOriginalFilename();
             String extension = "";
             if (originalFilename != null && originalFilename.contains(".")) {
                 extension = originalFilename.substring(originalFilename.lastIndexOf("."));

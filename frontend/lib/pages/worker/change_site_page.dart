@@ -80,17 +80,12 @@ class _ChangeSitePageState extends State<ChangeSitePage> {
   Future<void> _pickContractFile() async {
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-        allowMultiple: false,
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
         withData: true,
       );
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.single;
-        final ext = file.name.split('.').last.toLowerCase();
-        if (!['pdf', 'jpg', 'jpeg', 'png'].contains(ext)) {
-          _showMsg('只支持 PDF、JPG、PNG 格式的文件');
-          return;
-        }
         setState(() {
           _contractAttachmentName = file.name;
           _contractAttachmentBytes = file.bytes;

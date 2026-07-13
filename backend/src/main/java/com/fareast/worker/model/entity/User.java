@@ -28,6 +28,9 @@ public class User {
     @Column(unique = true, nullable = false)
     private String phone;
 
+    @Column(length = 5)
+    private String countryCode;
+
     @Column
     @JsonIgnore   // 序列化时忽略密码字段
     private String password;

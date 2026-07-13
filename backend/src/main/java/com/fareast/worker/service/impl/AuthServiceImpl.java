@@ -16,6 +16,7 @@ import com.fareast.worker.service.AuthService;
 import com.fareast.worker.service.SmsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -25,11 +26,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -56,6 +59,9 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     private CompanyRepository companyRepository;
 
+    @Autowired
+    private RedisTemplate<String, String> redisTemplate;
+
     @Override
     @Transactional
     public Map<String, Object> register(RegisterRequest request) {
@@ -73,6 +79,7 @@ public class AuthServiceImpl implements AuthService {
         // Create user
         User.UserBuilder userBuilder = User.builder()
                 .phone(request.getPhone())
+                .countryCode(request.getCountryCode() != null ? request.getCountryCode() : "+852")
                 .password(passwordEncoder.encode(request.getPassword()))
                 .name(request.getChineseName())   // 中文姓名
                 .englishName(request.getEnglishName()) // 英文姓名
@@ -101,13 +108,25 @@ public class AuthServiceImpl implements AuthService {
         // 只有工人角色才创建 WorkerProfile
         if (parseRole(request.getRole()) == UserRole.WORKER) {
             String workerNumber = generateWorkerNumber();
-            WorkerProfile profile = WorkerProfile.builder()
+            WorkerProfile.WorkerProfileBuilder profileBuilder = WorkerProfile.builder()
                     .userId(user.getId())
+                    .chineseName(request.getChineseName())
+                    .englishName(request.getEnglishName())
                     .workerNumber(workerNumber)
                     .blacklisted(false)
                     .cardLocked(false)
-                    .faceRegistered(false)
-                    .build();
+                    .faceRegistered(false);
+
+            // 出生日期（工人注册时必填）
+            if (request.getBirthDate() != null && !request.getBirthDate().isBlank()) {
+                try {
+                    profileBuilder.birthDate(LocalDate.parse(request.getBirthDate()));
+                } catch (Exception e) {
+                    throw new BusinessException(400, "出生日期格式不正確，請使用 yyyy-MM-dd");
+                }
+            }
+
+            WorkerProfile profile = profileBuilder.build();
             workerProfileRepository.save(profile);
             log.info("工人資料已創建: userId={}, workerNumber={}", user.getId(), workerNumber);
         } else {
@@ -125,14 +144,33 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public Map<String, Object> login(LoginRequest request) {
+        // 暴力破解防护：检查失败计数
+        String failKey = "login:fail:" + request.getPhone();
+        String failCountStr = redisTemplate.opsForValue().get(failKey);
+        int failCount = failCountStr != null ? Integer.parseInt(failCountStr) : 0;
+
+        if (failCount >= 5) {
+            Long ttl = redisTemplate.getExpire(failKey, TimeUnit.SECONDS);
+            long remainMin = Math.max(1, (ttl != null ? ttl : 1800) / 60);
+            throw new BusinessException(429, "登录尝试次数过多，请" + remainMin + "分钟后重试");
+        }
+
         // Find user
         User user = userRepository.findByPhone(request.getPhone())
-                .orElseThrow(() -> new BusinessException(400, "手機號碼未註冊"));
+                .orElseThrow(() -> {
+                    // 用户不存在也计入失败
+                    recordLoginFail(failKey);
+                    return new BusinessException(400, "手機號碼未註冊");
+                });
 
         // Verify password
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            recordLoginFail(failKey);
             throw new BusinessException(401, "密碼錯誤");
         }
+
+        // 登录成功，清除失败计数
+        redisTemplate.delete(failKey);
 
         // Check status
         if (user.getStatus() == UserStatus.DISABLED) {
@@ -155,6 +193,15 @@ public class AuthServiceImpl implements AuthService {
         result.put("user", user);
         result.put("token", token);
         return result;
+    }
+
+    /**
+     * 记录登录失败次数，30分钟内连续5次失败后锁定
+     */
+    private void recordLoginFail(String failKey) {
+        String failCountStr = redisTemplate.opsForValue().get(failKey);
+        int count = failCountStr != null ? Integer.parseInt(failCountStr) : 0;
+        redisTemplate.opsForValue().set(failKey, String.valueOf(count + 1), 30, TimeUnit.MINUTES);
     }
 
     @Override

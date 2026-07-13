@@ -10,6 +10,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
@@ -55,6 +56,15 @@ public class WorkerProfile {
 
     @Column
     private String contractAttachment;
+
+    @Column
+    private String emergencyContactName;
+
+    @Column
+    private String emergencyContactPhone;
+
+    @Column
+    private LocalDate birthDate;
 
     @Column
     private Boolean faceRegistered;

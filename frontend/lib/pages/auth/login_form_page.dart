@@ -49,8 +49,9 @@ class _LoginFormPageState extends State<LoginFormPage> {
       Navigator.pushReplacementNamed(context, route);
     } catch (e) {
       if (!mounted) return;
+      final msg = e.toString().replaceAll('Exception: ', '');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('登入失敗：$e'), backgroundColor: AppTheme.errorColor),
+        SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
