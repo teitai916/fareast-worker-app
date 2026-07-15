@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:typed_data';
-import 'dart:io';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
 import 'package:fareast_worker_app/pages/worker/safety_videos_page.dart';
 import 'package:fareast_worker_app/pages/notifications_page.dart';
 import 'package:fareast_worker_app/pages/internal/scan_deduct_page.dart';
+import 'package:fareast_worker_app/pages/safety/evaluation_list_page.dart';
+import 'package:fareast_worker_app/pages/safety/non_compliant_list_page.dart';
 import 'package:fareast_worker_app/widgets/weather_warning_bar.dart';
 import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
@@ -394,9 +395,15 @@ class _InternalHomePageState extends State<InternalHomePage> {
                             );
                             if (result == null || result.files.isEmpty) return;
                             final file = result.files.first;
+                            if (file.size > 5 * 1024 * 1024) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('文件大小不能超過5MB'), backgroundColor: AppTheme.errorColor),
+                              );
+                              return;
+                            }
                             setDialogState(() => _uploading = true);
                             try {
-                              final bytes = file.bytes ?? await File(file.path!).readAsBytes();
+                              final bytes = file.bytes!;
                               final url = await _api.uploadFile(
                                 bytes: bytes,
                                 filename: file.name,
@@ -806,6 +813,10 @@ class _InternalHomePageState extends State<InternalHomePage> {
         _quickAction(Icons.fingerprint, '打卡', canCheckIn, () => _internalCheckIn()),
         _quickAction(Icons.smart_display, '安全培訓', true, () =>
             Navigator.push(context, MaterialPageRoute(builder: (_) => const SafetyVideosPage()))),
+        _quickAction(Icons.assignment, '安全評分', true, () =>
+            Navigator.pushNamed(context, '/safety/evaluations')),
+        _quickAction(Icons.warning_amber, '不合格清單', true, () =>
+            Navigator.pushNamed(context, '/safety/non-compliant')),
         _quickAction(Icons.add_location, '申請地盤', true, _showApplySiteDialog),
         _quickAction(Icons.lock_open, '解鎖工人', _lockedWorkers.isNotEmpty, () {
           _pageController.animateToPage(0, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);

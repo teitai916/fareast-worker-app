@@ -86,6 +86,10 @@ class _ChangeSitePageState extends State<ChangeSitePage> {
       );
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.single;
+        if (file.size > 5 * 1024 * 1024) {
+          _showMsg('文件大小不能超過5MB');
+          return;
+        }
         setState(() {
           _contractAttachmentName = file.name;
           _contractAttachmentBytes = file.bytes;

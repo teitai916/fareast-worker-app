@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/config/theme.dart';
+import 'package:fareast_worker_app/models/user_role.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
 import 'package:fareast_worker_app/services/shortcut_service.dart';
 import 'package:fareast_worker_app/pages/auth/login_page.dart';
@@ -77,7 +78,7 @@ class _SplashPageState extends State<SplashPage>
         _go(const WorkerHomePage());
       } else if (role == 'CONTRACTOR') {
         _go(const ContractorHomePage());
-      } else if (role == 'SITE_MANAGER' || role == 'PROJECT_MANAGER' || role == 'SUPER_ADMIN') {
+      } else if (UserRole.fromValue(role).isInternalStaff) {
         _go(const InternalHomePage());
       } else {
         _go(const AdminHomePage());

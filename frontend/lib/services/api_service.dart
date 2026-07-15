@@ -88,6 +88,7 @@ class TokenManager {
 
 /// API 服務
 class ApiService {
+  // 使用标准 http.Client()，依赖系统/设备可信证书链（Let's Encrypt 证书已生效）
   final http.Client _client = http.Client();
 
   String get baseUrl => ApiConfig.baseUrl;
@@ -746,7 +747,7 @@ class ApiService {
     request.fields['folder'] = folder;
     request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
 
-    final streamedResp = await request.send();
+    final streamedResp = await _client.send(request);
     final resp = await http.Response.fromStream(streamedResp);
     _handleError(resp);
     final data = jsonDecode(resp.body)['data'];
@@ -781,7 +782,7 @@ class ApiService {
       if (dailySalary != null) request.fields['dailySalary'] = dailySalary.toString();
       request.files.add(http.MultipartFile.fromBytes('contractAttachment', contractFileBytes, filename: contractFileName));
 
-      final streamedResp = await request.send();
+      final streamedResp = await _client.send(request);
       final resp = await http.Response.fromStream(streamedResp);
       _handleError(resp);
     } else {
@@ -1125,5 +1126,132 @@ class ApiService {
     );
     _handleError(resp);
     return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
+  }
+
+  // ===== Safety Evaluation APIs =====
+
+  /// 獲取考核評分列表
+  Future<List<Map<String, dynamic>>> getEvaluations() async {
+    if (ApiConfig.mockMode) return [];
+    final resp = await _client.get(
+      Uri.parse('$baseUrl/safety/evaluations'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    return (jsonDecode(resp.body)['data'] as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 獲取考核評分詳情
+  Future<Map<String, dynamic>> getEvaluationDetail(int id) async {
+    final resp = await _client.get(
+      Uri.parse('$baseUrl/safety/evaluations/$id'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
+  }
+
+  /// 創建評分草稿
+  Future<Map<String, dynamic>> createEvaluation(Map<String, dynamic> body) async {
+    final resp = await _client.post(
+      Uri.parse('$baseUrl/safety/evaluations'),
+      headers: ApiConfig.headers(token: token),
+      body: jsonEncode(body),
+    );
+    _handleError(resp);
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
+  }
+
+  /// 修改評分草稿
+  Future<Map<String, dynamic>> updateEvaluation(int id, Map<String, dynamic> body) async {
+    final resp = await _client.put(
+      Uri.parse('$baseUrl/safety/evaluations/$id'),
+      headers: ApiConfig.headers(token: token),
+      body: jsonEncode(body),
+    );
+    _handleError(resp);
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
+  }
+
+  /// 刪除評分草稿
+  Future<void> deleteEvaluation(int id) async {
+    final resp = await _client.delete(
+      Uri.parse('$baseUrl/safety/evaluations/$id'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+  }
+
+  /// 提交審核
+  Future<Map<String, dynamic>> submitEvaluation(int id, int assignedTo) async {
+    final resp = await _client.post(
+      Uri.parse('$baseUrl/safety/evaluations/$id/submit'),
+      headers: ApiConfig.headers(token: token),
+      body: jsonEncode({'assignedTo': assignedTo}),
+    );
+    _handleError(resp);
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
+  }
+
+  /// 撤回審核
+  Future<Map<String, dynamic>> withdrawEvaluation(int id) async {
+    final resp = await _client.post(
+      Uri.parse('$baseUrl/safety/evaluations/$id/withdraw'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
+  }
+
+  /// 審批通過
+  Future<Map<String, dynamic>> approveEvaluation(int id, {String comment = ''}) async {
+    final resp = await _client.post(
+      Uri.parse('$baseUrl/safety/evaluations/$id/approve'),
+      headers: ApiConfig.headers(token: token),
+      body: jsonEncode({'comment': comment}),
+    );
+    _handleError(resp);
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
+  }
+
+  /// 駁回
+  Future<Map<String, dynamic>> rejectEvaluation(int id, {String comment = ''}) async {
+    final resp = await _client.post(
+      Uri.parse('$baseUrl/safety/evaluations/$id/reject'),
+      headers: ApiConfig.headers(token: token),
+      body: jsonEncode({'comment': comment}),
+    );
+    _handleError(resp);
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
+  }
+
+  /// 知會
+  Future<Map<String, dynamic>> notifyEvaluation(int id) async {
+    final resp = await _client.post(
+      Uri.parse('$baseUrl/safety/evaluations/$id/notify'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
+  }
+
+  /// 獲取可選審批人列表
+  Future<List<Map<String, dynamic>>> getApprovers() async {
+    final resp = await _client.get(
+      Uri.parse('$baseUrl/safety/evaluations/approvers'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    return (jsonDecode(resp.body)['data'] as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 獲取不合格分判商清單
+  Future<List<Map<String, dynamic>>> getNonCompliantList() async {
+    final resp = await _client.get(
+      Uri.parse('$baseUrl/safety/evaluations/non-compliant'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    return (jsonDecode(resp.body)['data'] as List).cast<Map<String, dynamic>>();
   }
 }

@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
-<<<<<<< HEAD
 import 'package:fareast_worker_app/widgets/app_widgets.dart';
-=======
 import 'package:shared_preferences/shared_preferences.dart';
->>>>>>> feature/safetycheck
 
 class RegisterPage extends StatefulWidget {
   final String? initialRole;
@@ -37,15 +34,12 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _sendingCode = false;
   bool _obscurePassword = true;
   bool _agreed = false;
-<<<<<<< HEAD
-=======
   String? _countdownText;
   int _countdown = 0;
   DateTime? _birthDate;
   String _countryCode = '+852';
   static const _hkPhoneLength = 8;
   static const _cnPhoneLength = 11;
->>>>>>> feature/safetycheck
 
   @override
   void initState() {
@@ -135,11 +129,7 @@ class _RegisterPageState extends State<RegisterPage> {
     try {
       await _api.sendSms(phone);
       if (!mounted) return;
-<<<<<<< HEAD
-      _showMsg('驗證碼已發送到 $phone');
-=======
       _showMsg('短信驗證碼已發送到您註冊的手機號');
->>>>>>> feature/safetycheck
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().replaceAll('Exception: ', '');
@@ -149,8 +139,6 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-<<<<<<< HEAD
-=======
   void _startCountdown() async {
     final prefs = await SharedPreferences.getInstance();
     final endTime = DateTime.now().millisecondsSinceEpoch + 120000;
@@ -188,7 +176,6 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
->>>>>>> feature/safetycheck
   Future<void> _register() async {
     final phone = _phoneController.text.trim();
     final chineseName = _chineseNameController.text.trim();

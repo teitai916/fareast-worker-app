@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/config/theme.dart';
+import 'package:fareast_worker_app/models/user_role.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
 
 class LoginFormPage extends StatefulWidget {
@@ -34,16 +35,14 @@ class _LoginFormPageState extends State<LoginFormPage> {
       );
       if (!mounted) return;
 
-      // 根據角色決定跳轉，判頭不需要獲取工人檔案
+      // 根據角色決定跳轉
       String route;
-      if (user.role == 'CONTRACTOR') {
-        // 判頭直接進入判頭首頁
+      final role = UserRole.fromValue(user.role);
+      if (role == UserRole.contractor) {
         route = '/contractor/home';
-      } else if (user.role == 'SITE_MANAGER' || user.role == 'PROJECT_MANAGER' || user.role == 'SUPER_ADMIN') {
-        // 內部工作人員
+      } else if (role.isInternalStaff) {
         route = '/internal/home';
       } else {
-        // 工人：直接進入工人首頁
         route = '/worker/home';
       }
       Navigator.pushReplacementNamed(context, route);

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/config/theme.dart';
@@ -86,8 +85,13 @@ class _ChangeCompanyPageState extends State<ChangeCompanyPage> {
         allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
       );
       if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        if (file.size > 5 * 1024 * 1024) {
+          _showMsg('文件大小不能超過5MB');
+          return;
+        }
         setState(() {
-          _selectedFile = result.files.first;
+          _selectedFile = file;
         });
       }
     } catch (e) {

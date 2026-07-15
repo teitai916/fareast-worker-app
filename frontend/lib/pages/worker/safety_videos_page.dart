@@ -346,10 +346,11 @@ class _VideoPlayerPageState extends State<_VideoPlayerPage> {
       return;
     }
 
-    // 如果是相對路徑，拼接完整地址
+    // 如果是相對路徑，拼接完整地址（影片走 HTTPS，证书已生效）
+    final apiHost = ApiConfig.baseUrl.replaceAll('/api/v1', '');
     final fullUrl = videoUrl.startsWith('http')
         ? videoUrl
-        : '${ApiConfig.baseUrl.replaceAll('/api/v1', '')}$videoUrl';
+        : '$apiHost$videoUrl';
 
     try {
       _videoController = VideoPlayerController.networkUrl(Uri.parse(fullUrl));

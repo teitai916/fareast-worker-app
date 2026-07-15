@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:quick_actions/quick_actions.dart';
+import 'package:fareast_worker_app/models/user_role.dart';
 
 /// 全局 NavigatorKey，供快捷操作跳转
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -39,7 +40,7 @@ class ShortcutService {
           const ShortcutItem(type: changeCompany, localizedTitle: '更換公司', icon: 'shortcut_change_company'),
         ]);
       } else {
-        // SITE_MANAGER / PROJECT_MANAGER / SUPER_ADMIN
+        // 内部管理人员（SITE_MANAGER / PROJECT_MANAGER / INSTALL_MANAGER / SUPER_ADMIN）
         _quickActions.setShortcutItems([
           const ShortcutItem(type: scan, localizedTitle: '掃一掃', icon: 'shortcut_scan'),
           const ShortcutItem(type: checkIn, localizedTitle: '打卡', icon: 'shortcut_check_in'),

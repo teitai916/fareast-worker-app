@@ -86,6 +86,12 @@ class _WorkerRegisterPageState extends State<WorkerRegisterPage> {
 
       final file = result.files.first;
       if (file.bytes == null) return;
+      if (file.size > 5 * 1024 * 1024) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('文件大小不能超過5MB'), backgroundColor: AppTheme.errorColor),
+        );
+        return;
+      }
 
       setState(() => _loading = true);
 

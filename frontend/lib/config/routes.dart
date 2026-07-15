@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fareast_worker_app/models/contractor_safety_evaluation.dart';
 import 'package:fareast_worker_app/pages/auth/login_page.dart';
 import 'package:fareast_worker_app/pages/auth/login_form_page.dart';
 import 'package:fareast_worker_app/pages/auth/register_page.dart';
@@ -18,6 +19,10 @@ import 'package:fareast_worker_app/pages/notifications_page.dart';
 import 'package:fareast_worker_app/pages/admin/admin_home_page.dart';
 import 'package:fareast_worker_app/pages/internal/internal_home_page.dart';
 import 'package:fareast_worker_app/pages/internal/scan_deduct_page.dart';
+import 'package:fareast_worker_app/pages/safety/evaluation_list_page.dart';
+import 'package:fareast_worker_app/pages/safety/evaluation_form_page.dart';
+import 'package:fareast_worker_app/pages/safety/evaluation_detail_page.dart';
+import 'package:fareast_worker_app/pages/safety/non_compliant_list_page.dart';
 
 class AppRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -61,6 +66,22 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const InternalHomePage());
       case '/internal/scan-deduct':
         return MaterialPageRoute(builder: (_) => const ScanDeductPage());
+      case '/safety/evaluations':
+        return MaterialPageRoute(builder: (_) => const EvaluationListPage());
+      case '/safety/evaluation-form':
+        final args = settings.arguments;
+        if (args is Map) {
+          return MaterialPageRoute(builder: (_) => EvaluationFormPage(
+            evaluationId: args['id'] as int?,
+            existing: args['existing'] as ContractorSafetyEvaluation?,
+          ));
+        }
+        return MaterialPageRoute(builder: (_) => const EvaluationFormPage());
+      case '/safety/evaluation-detail':
+        final evalId = settings.arguments as int? ?? 0;
+        return MaterialPageRoute(builder: (_) => EvaluationDetailPage(evaluationId: evalId));
+      case '/safety/non-compliant':
+        return MaterialPageRoute(builder: (_) => const NonCompliantListPage());
       default:
         return MaterialPageRoute(builder: (_) => const LoginPage());
     }

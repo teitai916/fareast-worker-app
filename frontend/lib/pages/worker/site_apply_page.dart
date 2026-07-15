@@ -105,6 +105,10 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
       if (result == null || result.files.isEmpty) return;
       final file = result.files.first;
       if (file.bytes == null) return;
+      if (file.size > 5 * 1024 * 1024) {
+        _showMsg('文件大小不能超過5MB');
+        return;
+      }
 
       setState(() => _loading = true);
       final url = await _api.uploadFile(
@@ -201,6 +205,10 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
       );
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.single;
+        if (file.size > 5 * 1024 * 1024) {
+          _showMsg('文件大小不能超過5MB');
+          return;
+        }
         setState(() {
           _contractAttachmentName = file.name;
           _contractAttachmentBytes = file.bytes;
