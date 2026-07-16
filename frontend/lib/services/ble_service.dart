@@ -53,8 +53,16 @@ class BleService {
   ///
   /// 返回扫描结果，包含匹配的 UUID 及所有检测到的 Beacon 信息
   Future<BeaconScanResult> scanForBeacon(String expectedBeaconIds, {Duration timeout = const Duration(seconds: 10)}) async {
+    // 0. 检查设备是否支持蓝牙
+    if (await FlutterBluePlus.isSupported == false) {
+      debugPrint('[BleService] 设备不支持蓝牙');
+      throw BleException('此裝置不支援藍牙');
+    }
+
     // 1. 检查蓝牙状态
-    final adapterState = await FlutterBluePlus.adapterState.first;
+    // iOS 上 CBCentralManager 初始化完成前 adapterState 会是 unknown，
+    // 需等待其变为确定状态（on/off），避免误报"蓝牙未开启"。
+    final adapterState = await _waitForStableAdapterState();
     if (adapterState != BluetoothAdapterState.on) {
       debugPrint('[BleService] 蓝牙未开启: $adapterState');
       throw BleException('藍牙未開啟，請先開啟藍牙');
@@ -152,6 +160,27 @@ class BleService {
       _scanSubscription?.cancel();
       _isScanning = false;
     }
+  }
+
+  /// 等待蓝牙适配器状态稳定（不为 unknown）
+  ///
+  /// iOS 上 CBCentralManager 初始化需要时间，adapterState 初始为 unknown，
+  /// 直接判断会误报"蓝牙未开启"。此方法监听状态流，等待第一个非 unknown 状态，
+  /// 最多等待 [timeout]（默认 3 秒），超时则返回最后一次状态。
+  Future<BluetoothAdapterState> _waitForStableAdapterState({
+    Duration timeout = const Duration(seconds: 3),
+  }) async {
+    var current = await FlutterBluePlus.adapterState.first;
+    if (current != BluetoothAdapterState.unknown) return current;
+
+    try {
+      current = await FlutterBluePlus.adapterState
+          .firstWhere((s) => s != BluetoothAdapterState.unknown)
+          .timeout(timeout);
+    } on TimeoutException {
+      debugPrint('[BleService] 等待蓝牙状态稳定超时，当前=$current');
+    }
+    return current;
   }
 
   /// 解析 iBeacon 广播数据，返回 {uuid, txPower} 或 null

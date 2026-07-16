@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -275,12 +276,7 @@ class _AttendancePageState extends State<AttendancePage> {
       } on BleException catch (e) {
         setState(() => _bleScanning = false);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.message),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
+        await _showBluetoothOffDialog(e.message);
         return;
       } catch (e) {
         setState(() => _bleScanning = false);
@@ -360,6 +356,46 @@ class _AttendancePageState extends State<AttendancePage> {
     }
   }
 
+  /// 打開定位設定
+  /// iOS 不允許 App 跳轉系統定位設定，只能跳到 App 自身設定頁；
+  /// Android 可直接跳系統定位設定頁。
+  Future<void> _openLocationSettings() async {
+    if (Platform.isIOS) {
+      await Geolocator.openAppSettings();
+    } else {
+      await Geolocator.openLocationSettings();
+    }
+  }
+
+  /// 藍牙未開啟時彈出引導對話框（含前往設定按鈕）
+  Future<void> _showBluetoothOffDialog(String message) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('藍牙未開啟'),
+        content: Text(
+          Platform.isIOS
+              ? '$message\n\n請於「設定 → 藍牙」開啟藍牙，或前往 App 設定頁授權後再打卡。'
+              : '$message\n\n請下拉通知欄開啟藍牙後再打卡。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消打卡'),
+          ),
+          TextButton(
+            onPressed: () {
+              Geolocator.openAppSettings();
+              Navigator.pop(ctx);
+            },
+            child: const Text('前往設定'),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// 獲取 GPS 定位，處理各種異常情況
   /// [requiredForCheckIn] 為 true 時，定位失敗會阻斷打卡；false 時僅記錄不阻斷
   Future<Position?> _getPosition({bool requiredForCheckIn = true}) async {
@@ -381,7 +417,7 @@ class _AttendancePageState extends State<AttendancePage> {
             ),
             TextButton(
               onPressed: () {
-                Geolocator.openLocationSettings();
+                _openLocationSettings();
                 Navigator.pop(ctx, false);
               },
               child: const Text('前往設定開啟'),

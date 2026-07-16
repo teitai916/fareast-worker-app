@@ -57,6 +57,10 @@
 	<string>使用藍牙掃描地盤信標以確認打卡位置</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>使用藍牙掃描地盤信標以確認打卡位置</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>打卡時需要使用您的位置以確認您在地盤範圍內</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>打卡時需要使用您的位置以確認您在地盤範圍內</string>
 	<key>NSCameraUsageDescription</key>
 	<string>掃描工人二維碼進行安全扣分</string>
 	<key>UISupportedInterfaceOrientations</key>
