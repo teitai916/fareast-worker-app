@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fareast_worker_app/models/user.dart';
+import 'http_client_io.dart' if (dart.library.html) 'http_client_web.dart';
 
 /// API 基礎配置
 class ApiConfig {
@@ -88,8 +89,7 @@ class TokenManager {
 
 /// API 服務
 class ApiService {
-  // 使用标准 http.Client()，依赖系统/设备可信证书链（Let's Encrypt 证书已生效）
-  final http.Client _client = http.Client();
+  final http.Client _client = createPlatformClient();
 
   String get baseUrl => ApiConfig.baseUrl;
   String? get token => TokenManager.token;

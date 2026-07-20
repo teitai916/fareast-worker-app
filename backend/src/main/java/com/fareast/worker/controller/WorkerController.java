@@ -695,7 +695,10 @@ public class WorkerController {
             }
             String expectedMime = ALLOWED_MIME_TYPES.get(ext);
             String actualMime = contractFile.getContentType();
-            if (actualMime != null && !expectedMime.equals(actualMime)) {
+            // 允许 application/octet-stream（泛型二进制，常见于 HTTP 客户端上传）
+            if (actualMime != null && !actualMime.isEmpty()
+                    && !expectedMime.equalsIgnoreCase(actualMime)
+                    && !"application/octet-stream".equalsIgnoreCase(actualMime)) {
                 throw new BusinessException(400, "文件内容与扩展名不匹配，仅允许上传 PDF、JPG、PNG 文件");
             }
 

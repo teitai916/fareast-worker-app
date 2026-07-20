@@ -191,12 +191,56 @@ docker compose down -v
 ### 更新后端
 
 ```bash
-# 重新构建镜像并重启
+# 重新构建镜像并重启（复用构建缓存，速度快）
 docker compose up -d --build backend
-
-# 如果只修改了代码（未改依赖），跳过构建缓存更快
-docker compose up -d --build --no-cache backend
 ```
+
+> ⚠️ **强制全量重建（不使用缓存）**：`--no-cache` 是 `docker compose build` 的参数，
+> **`docker compose up` 不支持该参数**。不能写成 `docker compose up -d --build --no-cache backend`
+> （会报 `unknown flag: --no-cache`）。正确做法是先 build 再 up：
+>
+> ```bash
+> docker compose build --no-cache backend
+> docker compose up -d backend
+> ```
+>
+> 适用场景：源码/配置改动后镜像层疑似被缓存（例如 RedisConfig 等被回滚的旧代码未生效），
+> 用 `--no-cache` 确保从头构建。
+
+### 重新部署（代码/配置更新）
+
+> **证书随包走，永不丢失**：真实 Let's Encrypt 证书（`fullchain.pem`/`privkey.pem`）
+> 已放在 `deploy/nginx/ssl/`，随 `deploy/` 一起打包到服务器。因此重部署可以放心
+> `rm -rf ~/deploy` 后重新解压，证书不会丢。证书私钥已在 `.gitignore` 中忽略，
+> 不会提交到 Git（仅保留在本地磁盘供打包）。
+> 若需更新证书：替换 `deploy/nginx/ssl/` 下两个文件，重新打包部署即可。
+
+**本地打包（排除上传/日志大文件，证书已包含在 deploy/ 内）：**
+
+```bash
+cd /path/to/fareast-worker-app
+tar -czf fareast-deploy.tar.gz \
+  --exclude="backend/uploads" \
+  --exclude="backend/logs" \
+  --exclude="backend/*.log" \
+  --exclude="backend/nul" \
+  backend/ deploy/
+scp fareast-deploy.tar.gz user@server-ip:~/
+```
+
+**服务器（可安全清空后重解压，证书随包恢复）：**
+
+```bash
+rm -rf ~/backend ~/deploy
+tar xzf ~/fareast-deploy.tar.gz -C ~/
+cd ~/deploy
+docker compose build --no-cache backend
+docker compose up -d backend
+docker compose restart nginx
+```
+
+> 验证：`curl -s https://fsapp.fefacade.com/api/v1/actuator/health` 应返回 `{"status":"UP"}`，
+> 且 `docker compose ps` 中 nginx 为 `Up`（非 Restarting）。
 
 ---
 
@@ -267,16 +311,12 @@ flutter build web \
 
 ### 内网测试 APK（无需 SSL 证书）
 
-内网测试时为了避免自签名证书问题，`api_service.dart` 中使用了 `IOClient` + `badCertificateCallback`：
+生产环境已部署有效的 Let's Encrypt 证书（`fsapp.fefacade.com`），`api_service.dart` 现使用标准
+`http.Client()`，依赖系统/设备可信证书链，**无需任何自签证书绕过**。
 
-```dart
-// api_service.dart 第 93-97 行
-final http.Client _client = IOClient(HttpClient()
-  ..badCertificateCallback = (cert, host, port) =>
-      host == 'fsapp.fefacade.com' || host == '10.106.8.165');
-```
-
-> ⚠️ 正式上线前需删除此回调，恢复 `http.Client()`。
+> 早期版本曾为自签证书在 `api_service.dart` 中使用 `IOClient` + `badCertificateCallback` 临时绕过，
+> 该方案已于证书上线后移除。如再次看到此回调，说明代码被回滚，需还原为 `http.Client()`。
+> 本地开发走 `http://localhost:8080` 同样无需绕过（明文 HTTP 不受证书校验影响）。
 
 ---
 
@@ -443,10 +483,8 @@ backend/
 frontend/
 ├── lib/
 │   ├── config/api_config.dart   # API 地址配置
-│   └── services/api_service.dart # HTTP 客户端（含 SSL 回调）
+│   └── services/api_service.dart # HTTP 客户端（标准 http.Client，依赖可信证书链）
 └── android/
     └── app/src/main/
-        ├── AndroidManifest.xml   # networkSecurityConfig 引用
-        └── res/xml/
-            └── network_security_config.xml
+        └── AndroidManifest.xml   # Android 清单配置
 ```

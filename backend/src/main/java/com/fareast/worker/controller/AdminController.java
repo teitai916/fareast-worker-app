@@ -21,7 +21,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/admin")
-@PreAuthorize("hasAnyRole('SITE_MANAGER','PROJECT_MANAGER')")
+@PreAuthorize("hasAnyRole('SITE_MANAGER','PROJECT_MANAGER','INSTALL_MANAGER')")
 public class AdminController {
 
     @Autowired

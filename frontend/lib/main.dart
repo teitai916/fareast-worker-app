@@ -16,8 +16,15 @@ void main() async {
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.dark,
   ));
-  // 加载本地存储的登录状态
-  await TokenManager.loadFromStorage();
+  // 加载本地存储的登录状态（带 3 秒超时保护）
+  try {
+    await TokenManager.loadFromStorage().timeout(
+      const Duration(seconds: 3),
+      onTimeout: () => debugPrint('main: loadFromStorage 超时，跳过'),
+    );
+  } catch (_) {
+    debugPrint('main: loadFromStorage 异常，跳过');
+  }
   // 初始化快捷操作监听
   ShortcutService.init();
   runApp(const App());

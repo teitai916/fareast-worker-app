@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/models/user_role.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
+import 'package:fareast_worker_app/services/biometric_service.dart';
 
 class LoginFormPage extends StatefulWidget {
   const LoginFormPage({super.key});
@@ -35,6 +36,14 @@ class _LoginFormPageState extends State<LoginFormPage> {
       );
       if (!mounted) return;
 
+      // 登录成功后，提示是否启用生物识别
+      await _maybeEnableBiometric(
+        _phoneController.text.trim(),
+        _passwordController.text,
+      );
+
+      if (!mounted) return;
+
       // 根據角色決定跳轉
       String route;
       final role = UserRole.fromValue(user.role);
@@ -57,6 +66,37 @@ class _LoginFormPageState extends State<LoginFormPage> {
     }
   }
 
+  /// 密码登录成功后，若设备支持且未启用生物识别，弹出开通对话框
+  Future<void> _maybeEnableBiometric(String phone, String password) async {
+    final available = await BiometricService.isAvailable();
+    if (!available || !mounted) return;
+    final alreadyEnabled = await BiometricService.isBiometricEnabled();
+    if (alreadyEnabled || !mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('啟用指紋/面容登入'),
+        content: const Text(
+          '啟用後，下次打開App可直接使用指紋或面容快速登入，無需手動輸入密碼。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('跳過'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await BiometricService.saveCredentials(phone, password);
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('啟用'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -69,7 +109,8 @@ class _LoginFormPageState extends State<LoginFormPage> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: Form(
+          child: AutofillGroup(
+            child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -91,6 +132,7 @@ class _LoginFormPageState extends State<LoginFormPage> {
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
                   maxLength: 11,
+                  autofillHints: const [AutofillHints.telephoneNumber],
                   decoration: InputDecoration(
                     labelText: '手機號碼',
                     hintText: '請輸入香港手機號碼',
@@ -106,6 +148,7 @@ class _LoginFormPageState extends State<LoginFormPage> {
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
+                  autofillHints: const [AutofillHints.password],
                   decoration: InputDecoration(
                     labelText: '密碼',
                     prefixIcon: const Icon(Icons.lock_outline),
@@ -184,6 +227,7 @@ class _LoginFormPageState extends State<LoginFormPage> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

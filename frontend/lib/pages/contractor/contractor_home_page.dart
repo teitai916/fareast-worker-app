@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
+import 'package:fareast_worker_app/services/biometric_service.dart';
 import 'package:fareast_worker_app/pages/notifications_page.dart';
 import 'package:fareast_worker_app/widgets/empty_state_widget.dart';
 
@@ -45,6 +46,7 @@ class _ContractorHomePageState extends State<ContractorHomePage>
   List<dynamic> _changeRequests = [];
   bool _loadingCompanyChanges = true;
   List<dynamic> _companyChangeRequests = [];
+  bool _biometricEnabled = false;
 
   @override
   void initState() {
@@ -736,8 +738,9 @@ class _ContractorHomePageState extends State<ContractorHomePage>
         content: Text(approved ? '已批准申請' : '已拒絕申請'),
         backgroundColor: approved ? Colors.green : AppTheme.errorColor,
       ));
-      _loadApplications();
-    } catch (e) {
+    _loadApplications();
+    _refreshBiometricState();
+  } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作失敗：$e'), backgroundColor: AppTheme.errorColor));
     }
@@ -1018,6 +1021,8 @@ class _ContractorHomePageState extends State<ContractorHomePage>
             ),
           ),
           const SizedBox(height: 24),
+          _buildBiometricToggle(),
+          const SizedBox(height: 8),
           _buildMenuItem(Icons.logout, '退出登录', () => Navigator.pushReplacementNamed(context, '/login'), color: AppTheme.errorColor),
         ],
       ),
@@ -1035,6 +1040,81 @@ class _ContractorHomePageState extends State<ContractorHomePage>
           child: Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
         ),
       ],
+    );
+  }
+
+  Future<void> _refreshBiometricState() async {
+    final enabled = await BiometricService.isBiometricEnabled();
+    if (mounted) setState(() => _biometricEnabled = enabled);
+  }
+
+  Future<void> _toggleBiometric() async {
+    if (_biometricEnabled) {
+      await BiometricService.clearCredentials();
+      setState(() => _biometricEnabled = false);
+    } else {
+      final password = await _showEnableBiometricDialog();
+      if (password != null && password.isNotEmpty) {
+        final user = TokenManager.currentUser;
+        if (user != null) {
+          await BiometricService.saveCredentials(user.phone, password);
+          setState(() => _biometricEnabled = true);
+        }
+      }
+    }
+  }
+
+  Future<String?> _showEnableBiometricDialog() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('啟用指紋/面容登入'),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: '請輸入密碼以確認身份',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('啟用'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Widget _buildBiometricToggle() {
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 4),
+      child: ListTile(
+        leading: Icon(
+          Icons.fingerprint,
+          color: _biometricEnabled ? AppTheme.primaryColor : AppTheme.textHint,
+          size: 22,
+        ),
+        title: Text(
+          _biometricEnabled ? '指紋/面容登入：已啟用' : '指紋/面容登入：未啟用',
+          style: TextStyle(
+            color: _biometricEnabled ? AppTheme.primaryColor : AppTheme.textSecondary,
+          ),
+        ),
+        subtitle: const Text('點擊切換', style: TextStyle(fontSize: 12)),
+        trailing: Icon(
+          _biometricEnabled ? Icons.toggle_on : Icons.toggle_off,
+          size: 32,
+          color: _biometricEnabled ? AppTheme.primaryColor : AppTheme.textHint,
+        ),
+        onTap: _toggleBiometric,
+      ),
     );
   }
 

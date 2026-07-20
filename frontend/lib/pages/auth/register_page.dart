@@ -264,7 +264,8 @@ class _RegisterPageState extends State<RegisterPage> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: Column(
+          child: AutofillGroup(
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('創建帳號', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
@@ -308,6 +309,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       controller: _phoneController,
                       keyboardType: TextInputType.phone,
                       maxLength: _countryCode == '+86' ? 11 : 8,
+                      autofillHints: const [AutofillHints.telephoneNumber],
                       decoration: InputDecoration(
                         labelText: '手機號碼 *',
                         hintText: _countryCode == '+86' ? '內地手機號碼' : '香港手機號碼',
@@ -515,6 +517,7 @@ class _RegisterPageState extends State<RegisterPage> {
               TextFormField(
                 controller: _passwordController,
                 obscureText: _obscurePassword,
+                autofillHints: const [AutofillHints.newPassword],
                 decoration: InputDecoration(
                   labelText: '設置密碼 *',
                   hintText: '不少於6位',
@@ -613,6 +616,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 ),
               ),
             ],
+          ),
           ),
         ),
       ),

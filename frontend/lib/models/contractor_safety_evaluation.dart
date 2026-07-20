@@ -1,4 +1,6 @@
 /// 分判商安全考核评分数据模型
+import 'package:fareast_worker_app/config/safety_score_config.dart';
+
 class ContractorSafetyEvaluation {
   final int? id;
   final int? siteId;
@@ -114,27 +116,7 @@ class ContractorSafetyEvaluation {
       'period': period,
       'periodYear': periodYear,
       'periodQuarter': periodQuarter,
-      'score1': scores['管理层安全态度'],
-      'score2': scores['具備足夠能力的安全人員'],
-      'score3': scores['提供安全訓練、指示及監督'],
-      'score4': scores['地盤安全設施之提供及維持'],
-      'score5': scores['合作性'],
-      'score6': scores['提供予屬下員工及使用個人保護裝置'],
-      'score7': scores['安全意外率'],
-      'score8': scores['安全表現'],
-      'score9': scores['提供施工方案及風險評估'],
-      'score10': scores['聘請安全督導員'],
-      'score11': scores['起重機械/裝置證書'],
-      'score12': scores['高空工作'],
-      'score13': scores['個人防護裝備使用情況'],
-      'score14': scores['施工/物料擺放位置整潔'],
-      'score15': scores['依照施工方案進行工序'],
-      'score16': scores['改善態度'],
-      'score17': scores['參與早會及安全施工程序會議'],
-      'score18': scores['提供合適的工具'],
-      'score19': scores['合約安全守則'],
-      'score20': scores['法例(包括工作守則)'],
-      'score21': scores['工傷事故記錄'],
+      ...{for (final i in SafetyScoreConfig.names.keys) 'score$i': scores[SafetyScoreConfig.name(i)]},
       'evidenceAttachments': evidenceAttachments,
       'remarks': remarks,
     };

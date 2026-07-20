@@ -63,6 +63,8 @@
 	<string>打卡時需要使用您的位置以確認您在地盤範圍內</string>
 	<key>NSCameraUsageDescription</key>
 	<string>掃描工人二維碼進行安全扣分</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>使用面容 ID 快速登入遠東工地通</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

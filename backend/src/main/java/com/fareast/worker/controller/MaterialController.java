@@ -57,7 +57,7 @@ public class MaterialController {
     }
 
     @GetMapping("/site-requests/{siteId}")
-    @PreAuthorize("hasAnyRole('CONTRACTOR','SITE_MANAGER','PROJECT_MANAGER')")
+    @PreAuthorize("hasAnyRole('CONTRACTOR','SITE_MANAGER','PROJECT_MANAGER','INSTALL_MANAGER')")
     public ApiResponse<PageResponse<MaterialRequest>> getSiteRequests(
             @PathVariable Long siteId,
             @RequestParam(defaultValue = "0") int page,
@@ -76,7 +76,7 @@ public class MaterialController {
     }
 
     @PostMapping("/process/{requestId}")
-    @PreAuthorize("hasAnyRole('SITE_MANAGER','PROJECT_MANAGER')")
+    @PreAuthorize("hasAnyRole('SITE_MANAGER','PROJECT_MANAGER','INSTALL_MANAGER')")
     public ApiResponse<Void> processRequest(
             @AuthenticationPrincipal String userId,
             @PathVariable Long requestId,

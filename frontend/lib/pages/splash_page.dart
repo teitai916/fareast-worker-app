@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/models/user_role.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
+import 'package:fareast_worker_app/services/biometric_service.dart';
 import 'package:fareast_worker_app/services/shortcut_service.dart';
 import 'package:fareast_worker_app/pages/auth/login_page.dart';
 import 'package:fareast_worker_app/pages/worker/worker_home_page.dart';
@@ -53,40 +54,85 @@ class _SplashPageState extends State<SplashPage>
     super.dispose();
   }
 
+  late final String _logTag = 'SplashPage';
+
   Future<void> _checkAuth() async {
-    await TokenManager.loadFromStorage();
-    final token = TokenManager.token;
-
-    await Future.delayed(const Duration(milliseconds: 1500));
-
-    if (token == null || token.isEmpty) {
-      ShortcutService.setupForRole(null); // 清除快捷操作
-      _go(const LoginPage());
-      return;
-    }
-
-    // 有 token → 调用 /auth/me 验证并获取用户信息
     try {
-      final user = await ApiService().authMe();
-      await TokenManager.setUser(user);
-      final role = user.role;
+      // 超时保护：5 秒内完成存储读取，超时不抛异常，按无 token 处理
+      String? token;
+      try {
+        await TokenManager.loadFromStorage().timeout(
+          const Duration(seconds: 5),
+        );
+        token = TokenManager.token;
+      } catch (_) {
+        debugPrint('[$_logTag] loadFromStorage 超时/异常，按无 token 处理');
+        token = null;
+      }
 
-      // 根据角色设置快捷操作
-      ShortcutService.setupForRole(role);
+      await Future.delayed(const Duration(milliseconds: 1500));
 
-      if (role == 'WORKER') {
-        _go(const WorkerHomePage());
-      } else if (role == 'CONTRACTOR') {
-        _go(const ContractorHomePage());
-      } else if (UserRole.fromValue(role).isInternalStaff) {
-        _go(const InternalHomePage());
-      } else {
-        _go(const AdminHomePage());
+      if (token == null || token.isEmpty) {
+        // 无 token，先尝试生物识别自动登录
+        try {
+          final biometricAvailable = await BiometricService.isAvailable();
+          if (biometricAvailable) {
+            final success = await BiometricService.biometricLogin();
+            if (success) {
+              final user = TokenManager.currentUser;
+              if (user != null && mounted) {
+                final role = user.role;
+                ShortcutService.setupForRole(role);
+                if (role == 'WORKER') {
+                  _go(const WorkerHomePage());
+                } else if (role == 'CONTRACTOR') {
+                  _go(const ContractorHomePage());
+                } else if (UserRole.fromValue(role).isInternalStaff) {
+                  _go(const InternalHomePage());
+                } else {
+                  _go(const AdminHomePage());
+                }
+                return;
+              }
+            }
+          }
+        } catch (_) {
+          // 生物识别模块异常 → 忽略，正常走登录页
+        }
+        // 生物识别未启用/失败 → 进入登录页
+        ShortcutService.setupForRole(null); // 清除快捷操作
+        _go(const LoginPage());
+        return;
+      }
+
+      // 有 token → 调用 /auth/me 验证并获取用户信息
+      try {
+        final user = await ApiService().authMe();
+        await TokenManager.setUser(user);
+        final role = user.role;
+
+        // 根据角色设置快捷操作
+        ShortcutService.setupForRole(role);
+
+        if (role == 'WORKER') {
+          _go(const WorkerHomePage());
+        } else if (role == 'CONTRACTOR') {
+          _go(const ContractorHomePage());
+        } else if (UserRole.fromValue(role).isInternalStaff) {
+          _go(const InternalHomePage());
+        } else {
+          _go(const AdminHomePage());
+        }
+      } catch (e) {
+        await TokenManager.clear();
+        ShortcutService.setupForRole(null); // 清除快捷操作
+        _go(const LoginPage());
       }
     } catch (e) {
-      await TokenManager.clear();
-      ShortcutService.setupForRole(null); // 清除快捷操作
-      _go(const LoginPage());
+      // 底层存储初始化等任何异常 → 兜底进入登录页，避免 splash 卡死
+      debugPrint('[$_logTag] _checkAuth 异常fallback: $e');
+      ShortcutService.setupForRole(null);
+      if (mounted) _go(const LoginPage());
     }
   }
 

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/config/theme.dart';
+import 'package:fareast_worker_app/models/user_role.dart';
+import 'package:fareast_worker_app/services/api_service.dart';
+import 'package:fareast_worker_app/services/biometric_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -10,6 +13,55 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   static const Color _blue = Color(0xFF2563EB);
+  bool _biometricReady = false;
+  bool _biometricLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBiometric();
+  }
+
+  Future<void> _checkBiometric() async {
+    debugPrint('[LoginPage] 检查生物识别...');
+    final available = await BiometricService.isAvailable();
+    debugPrint('[LoginPage] isAvailable=$available');
+    if (!available) return;
+    final enabled = await BiometricService.isBiometricEnabled();
+    debugPrint('[LoginPage] isBiometricEnabled=$enabled');
+    if (!enabled) return;
+    if (!mounted) return;
+    setState(() => _biometricReady = true);
+  }
+
+  Future<void> _biometricLogin() async {
+    setState(() => _biometricLoading = true);
+    final success = await BiometricService.biometricLogin();
+    if (!mounted) return;
+    setState(() => _biometricLoading = false);
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('指紋登入失敗，請使用密碼登入')),
+      );
+      return;
+    }
+    _navigateByRole();
+  }
+
+  void _navigateByRole() {
+    final user = TokenManager.currentUser; // from api_service.dart
+    if (user == null) return;
+    final role = user.role;
+    if (role == 'WORKER') {
+      Navigator.pushReplacementNamed(context, '/worker/home');
+    } else if (role == 'CONTRACTOR') {
+      Navigator.pushReplacementNamed(context, '/contractor/home');
+    } else if (UserRole.fromValue(role).isInternalStaff) {
+      Navigator.pushReplacementNamed(context, '/internal/home');
+    } else {
+      Navigator.pushReplacementNamed(context, '/admin/home');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -79,6 +131,57 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 48),
 
+              // ── 登入按鈕（置頂，方便老用戶快速登入）──
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.pushNamed(context, '/login-form'),
+                  icon: const Icon(Icons.login, size: 20, color: Colors.white),
+                  label: const Text('手機號碼登入', style: TextStyle(fontSize: 16, color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _blue,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Biometric login button (only when enabled and available)
+              if (_biometricReady)
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: OutlinedButton.icon(
+                    onPressed: _biometricLoading ? null : _biometricLogin,
+                    icon: _biometricLoading
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.fingerprint, size: 20),
+                    label: Text(_biometricLoading ? '驗證中...' : '指紋/面容登入', style: const TextStyle(fontSize: 16)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _blue,
+                      side: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 40),
+
+              // Divider
+              Row(
+                children: [
+                  const Expanded(child: Divider()),
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    child: const Text('新用戶註冊', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                  ),
+                  const Expanded(child: Divider()),
+                ],
+              ),
+              const SizedBox(height: 24),
+
               // Welcome message
               const Text(
                 '請選擇您的身份以繼續',
@@ -109,37 +212,6 @@ class _LoginPageState extends State<LoginPage> {
                 subtitle: '平台管理 • 安全監控 • 審批管理',
                 color: const Color(0xFF7C3AED),
                 onTap: () => _showInternalLoginDialog(),
-              ),
-              const SizedBox(height: 40),
-
-              // Divider
-              Row(
-                children: [
-                  const Expanded(child: Divider()),
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16),
-                    child: const Text('已有帳號？', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-                  ),
-                  const Expanded(child: Divider()),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // Login button
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: () => Navigator.pushNamed(context, '/login-form'),
-                  icon: const Icon(Icons.login, size: 20, color: Colors.white),
-                  label: const Text('手機號碼登入', style: TextStyle(fontSize: 16, color: Colors.white)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _blue,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                ),
               ),
               const SizedBox(height: 32),
 

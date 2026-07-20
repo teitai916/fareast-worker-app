@@ -41,6 +41,9 @@ public class RegisterRequest {
     /** 判头注册时选择所属公司ID */
     private Long companyId;
 
+    /** 手机国际区号，如 +852、+86 */
+    private String countryCode;
+
     /** 工人出生日期（格式：yyyy-MM-dd，工人注册时必填） */
     @Pattern(regexp = "^\\d{4}-\\d{2}-\\d{2}$", message = "出生日期格式不正确")
     private String birthDate;

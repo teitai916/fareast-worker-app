@@ -6,6 +6,7 @@ enum UserRole {
   projectManager('project_manager', '項目經理'),
   installManager('install_manager', '安裝經理'),
   safetyOfficer('safety_officer', '安全人員'),
+  safetyAdmin('safety_admin', '安全总监'),
   notifiedParty('notified_party', '知會人員'),
   superAdmin('super_admin', '超級管理員');
 
@@ -24,6 +25,6 @@ enum UserRole {
   bool get isInternalStaff {
     return this == siteManager || this == projectManager ||
         this == installManager || this == superAdmin ||
-        this == safetyOfficer;
+        this == safetyOfficer || this == safetyAdmin;
   }
 }

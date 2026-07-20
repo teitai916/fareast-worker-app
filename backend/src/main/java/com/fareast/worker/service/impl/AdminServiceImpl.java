@@ -132,13 +132,16 @@ public class AdminServiceImpl implements AdminService {
         WorkerProfile profile = workerProfileRepository.findById(workerId)
                 .orElseThrow(() -> new BusinessException(404, "工人資料不存在"));
 
-        if (!Boolean.TRUE.equals(profile.getCardLocked())) {
-            throw new BusinessException(400, "工卡未被鎖定");
+        if (!Boolean.TRUE.equals(profile.getCardLocked())
+                && !Boolean.TRUE.equals(profile.getBlacklisted())) {
+            throw new BusinessException(400, "工卡未被鎖定且不在黑名單中");
         }
 
         profile.setCardLocked(false);
+        profile.setBlacklisted(false);
+        profile.setBlacklistReason(null);
         workerProfileRepository.save(profile);
-        log.info("工卡已解鎖: workerId={}", workerId);
+        log.info("工卡已解鎖（card_locked及blacklisted均已清除）: workerId={}", workerId);
     }
 
     @Override

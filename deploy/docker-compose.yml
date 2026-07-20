@@ -26,6 +26,7 @@ services:
       # 初始化脚本（首次启动执行）
       - ./init-scripts:/docker-entrypoint-initdb.d:ro
     ports:
+      # 临时开放：数据初始化期间用客户端直连 10.106.8.165:5432（完成后建议锁回 127.0.0.1）
       - "${POSTGRES_PORT:-5432}:5432"
     networks:
       - fareast-net
@@ -62,7 +63,7 @@ services:
       # 数据持久化（AOF + RDB）
       - redis-data:/data
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     networks:
       - fareast-net
     healthcheck:

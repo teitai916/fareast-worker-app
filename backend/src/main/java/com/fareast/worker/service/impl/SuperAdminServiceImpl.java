@@ -463,15 +463,17 @@ public class SuperAdminServiceImpl implements SuperAdminService {
     @Override
     public List<User> getAdminUsers() {
         return userRepository.findAll().stream()
-                .filter(u -> u.getRole() == UserRole.SITE_MANAGER || u.getRole() == UserRole.PROJECT_MANAGER)
+                .filter(u -> u.getRole() == UserRole.SITE_MANAGER || u.getRole() == UserRole.PROJECT_MANAGER
+                        || u.getRole() == UserRole.INSTALL_MANAGER)
                 .toList();
     }
 
     @Override
     @Transactional
     public User createAdminUser(User user) {
-        if (user.getRole() == UserRole.WORKER || user.getRole() == UserRole.CONTRACTOR) {
-            throw new BusinessException(400, "管理員角色不能為工人或分判商");
+        if (user.getRole() == UserRole.WORKER || user.getRole() == UserRole.CONTRACTOR
+                || user.getRole() == UserRole.SAFETY_OFFICER || user.getRole() == UserRole.NOTIFIED_PARTY) {
+            throw new BusinessException(400, "管理員角色不能為工人、分判商、安全人員或知會人員");
         }
         User saved = userRepository.save(user);
         log.info("管理員已新增: userId={}, role={}", saved.getId(), saved.getRole());

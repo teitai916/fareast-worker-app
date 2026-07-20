@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_beacon/flutter_beacon.dart';
 import 'package:flutter/foundation.dart';
 
 /// 单个 Beacon 信息
@@ -87,7 +89,7 @@ class BleService {
 
     // 4. 开始扫描
     final completer = Completer<String?>(); // matched UUID
-    Timer? timer;
+    Timer? outerTimer;
 
     try {
       if (_isScanning) {
@@ -97,50 +99,103 @@ class BleService {
 
       _isScanning = true;
 
-      // 监听扫描结果
-      _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
-        for (final result in results) {
-          final parsed = _parseIBeacon(result);
-          if (parsed == null) continue;
+      if (Platform.isIOS) {
+        // iOS 端 iBeacon 检测必须走 Core Location（CLLocationManager.startRangingBeacons），
+        // 不能依赖 FlutterBluePlus 的 BLE 扫描——iOS 会过滤掉 iBeacon 的 manufacturer data。
+        // flutter_beacon 在 iOS 上即调 Core Location，是 iOS 端 iBeacon 的正路。
+        final regions = expectedUuids.map((uuid) =>
+          Region(identifier: 'fareast-$uuid', proximityUUID: uuid)
+        ).toList();
 
-          final uuid = parsed['uuid'] as String;
-          final rssi = result.rssi;
-          final txPower = parsed['txPower'] as int;
-          final distance = _estimateDistance(rssi, txPower);
+        // 初始化（幂等）
+        final ok = await flutterBeacon.initializeScanning;
+        if (!ok) throw BleException('藍牙掃描初始化失敗');
+        debugPrint('[BleService] iOS flutter_beacon 初始化完成，regions=${regions.length}');
 
-          // 更新该 UUID 的最新 RSSI（取信号最强的一次）
-          final existing = allDetected[uuid.toLowerCase()];
-          if (existing == null || rssi > existing.rssi) {
-            allDetected[uuid.toLowerCase()] = BeaconInfo(
-              uuid: uuid,
-              rssi: rssi,
-              estimatedDistanceMeters: distance,
-            );
+        // 订阅 ranging 流（订阅即开始 ranging，取消订阅即停止）
+        _scanSubscription = flutterBeacon.ranging(regions).listen((result) {
+          if (result.beacons.isEmpty) return;
+          debugPrint('[BleService] [iOS 诊断] ranging region=${result.region.identifier} 收到 ${result.beacons.length} beacon');
+          for (final b in result.beacons) {
+            final uuid = b.proximityUUID.toLowerCase();
+            debugPrint('[BleService] [iOS 诊断]   iBeacon UUID=$uuid rssi=${b.rssi} accuracy=${b.accuracy.toStringAsFixed(2)}m');
+            if (!completer.isCompleted && expectedUuids.contains(uuid)) {
+              debugPrint('[BleService] 信标匹配成功: $uuid');
+              allDetected[uuid] = BeaconInfo(
+                uuid: b.proximityUUID,
+                rssi: b.rssi,
+                estimatedDistanceMeters: b.accuracy >= 0 ? b.accuracy : 0.0,
+              );
+              completer.complete(b.proximityUUID);
+            }
+          }
+        });
+
+        outerTimer = Timer(timeout, () {
+          if (!completer.isCompleted) {
+            debugPrint('[BleService] iOS ranging 超时 (${timeout.inSeconds}s)');
+            completer.complete(null);
+          }
+        });
+      } else {
+        // Android 端：继续用 flutter_blue_plus 做 BLE 扫描（单次 10s）
+        // 监听扫描结果（带诊断日志 + iBeacon 解析）
+        _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
+          // 诊断日志：记录原始 scan result 信息
+          if (results.isNotEmpty) {
+            debugPrint('[BleService] [Android 诊断] 收到 ${results.length} 条 scan result');
+            for (final r in results.take(3)) {
+              final mfg = r.advertisementData.manufacturerData;
+              final mfgSummary = mfg.isEmpty
+                  ? '空'
+                  : 'keys=${mfg.keys.toList()} (lens=${mfg.values.map((v) => v.length).toList()})';
+              debugPrint('[BleService] [Android 诊断]   device="${r.device.platformName}" rssi=${r.rssi} '
+                  'mfg=$mfgSummary '
+                  'advName="${r.advertisementData.advName}"');
+            }
+            if (results.length > 3) {
+              debugPrint('[BleService] [Android 诊断]   ... 还有 ${results.length - 3} 条');
+            }
           }
 
-          debugPrint('[BleService] 发现 iBeacon: UUID=$uuid, RSSI=$rssi, 估算距离=${distance.toStringAsFixed(1)}m');
+          for (final result in results) {
+            final parsed = _parseIBeacon(result);
+            if (parsed == null) continue;
+            final uuid = parsed['uuid'] as String;
+            final rssi = result.rssi;
+            final txPower = parsed['txPower'] as int;
+            final distance = _estimateDistance(rssi, txPower);
 
-          // 匹配检查
-          if (!completer.isCompleted && expectedUuids.contains(uuid.toLowerCase())) {
-            debugPrint('[BleService] 信标匹配成功: $uuid (RSSI=$rssi, ${distance.toStringAsFixed(1)}m)');
-            completer.complete(uuid);
+            final existing = allDetected[uuid.toLowerCase()];
+            if (existing == null || rssi > existing.rssi) {
+              allDetected[uuid.toLowerCase()] = BeaconInfo(
+                uuid: uuid,
+                rssi: rssi,
+                estimatedDistanceMeters: distance,
+              );
+            }
+
+            debugPrint('[BleService] 发现 iBeacon: UUID=$uuid, RSSI=$rssi, 估算距离=${distance.toStringAsFixed(1)}m');
+
+            if (!completer.isCompleted && expectedUuids.contains(uuid.toLowerCase())) {
+              debugPrint('[BleService] 信标匹配成功: $uuid (RSSI=$rssi, ${distance.toStringAsFixed(1)}m)');
+              completer.complete(uuid);
+            }
           }
-        }
-      });
+        });
 
-      // 启动扫描
-      await FlutterBluePlus.startScan(
-        timeout: timeout,
-        androidUsesFineLocation: true,
-      );
+        await FlutterBluePlus.startScan(
+          timeout: timeout,
+          androidUsesFineLocation: true,
+        );
 
-      // 设置超时
-      timer = Timer(timeout, () {
-        if (!completer.isCompleted) {
-          debugPrint('[BleService] 扫描超时 (${timeout.inSeconds}s)');
-          completer.complete(null);
-        }
-      });
+        outerTimer = Timer(timeout, () {
+          if (!completer.isCompleted) {
+            debugPrint('[BleService] Android 扫描超时 (${timeout.inSeconds}s)');
+            completer.complete(null);
+          }
+        });
+      }
 
       final matchedUuid = await completer.future;
 
@@ -156,7 +211,7 @@ class BleService {
       if (e is BleException) rethrow;
       throw BleException('藍牙掃描失敗: $e');
     } finally {
-      timer?.cancel();
+      outerTimer?.cancel();
       _scanSubscription?.cancel();
       _isScanning = false;
     }

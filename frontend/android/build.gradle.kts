@@ -19,6 +19,17 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+// 为缺少 namespace 声明的旧插件自动注入命名空间（AGP 8+ 要求）
+subprojects {
+    plugins.withId("com.android.library") {
+        extensions.configure<com.android.build.api.dsl.LibraryExtension>("android") {
+            if (namespace.isNullOrEmpty()) {
+                namespace = "com.example.${project.name.replace("-", "_")}"
+            }
+        }
+    }
+}
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }

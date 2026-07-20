@@ -26,25 +26,39 @@ class _WeatherWarningBarState extends State<WeatherWarningBar> {
     'WL': 5, 'WFNTSA': 5, 'WFIRE': 5, 'WCOLD': 5, 'WFROST': 5,
   };
 
+  // 从中文信号描述中提取信号号（如 "八號東北" -> 8, "十號" -> 10, "三號" -> 3）
+  static int? _chineseSignalNumber(String s) {
+    if (s.contains('十')) return 10;
+    if (s.contains('九')) return 9;
+    if (s.contains('八')) return 8;
+    if (s.contains('三')) return 3;
+    if (s.contains('一')) return 1;
+    return null;
+  }
+
   // 台风信号等级映射
+  // 真实 warnsum 中等级不在 name，而在 type（如 "八號東北"/"三號"/"十號"）与 inner code（如 TC8NE/TC10）
   static int _typhoonLevel(Map<String, dynamic> warn) {
-    // 尝试从字段中读取信号等级
-    // warnsum 中 typhoon 信号可能通过 name 字段包含 "一號"/"三號"/"八號" 等
-    final name = warn['name']?.toString() ?? '';
-    if (name.contains('十')) return 10;
-    if (name.contains('九')) return 9;
-    if (name.contains('八')) return 8;
-    if (name.contains('三')) return 3;
+    final type = warn['type']?.toString() ?? '';
+    final fromType = _chineseSignalNumber(type);
+    if (fromType != null) return fromType;
+    final code = warn['code']?.toString() ?? '';
+    final m = RegExp(r'TC(\d+)').firstMatch(code);
+    if (m != null) return int.tryParse(m.group(1)!) ?? 1;
     return 1; // 默认一號
   }
 
   // 暴雨等级映射
-  static int _rainstormLevel(String code) {
-    switch (code) {
-      case 'WRAINB': return 3;  // 黑色
-      case 'WRAINR': return 2;  // 红色
-      default: return 1;        // 黄色
-    }
+  // 真实 warnsum 中等级在 type（黃色/紅色/黑色）或 inner code 后缀（WRAINA/WRAINR/WRAINB -> A/R/B）
+  static int _rainstormLevel(String? type, String? innerCode) {
+    final t = type ?? '';
+    if (t.contains('黑')) return 3; // 黑色
+    if (t.contains('紅')) return 2; // 紅色
+    if (t.contains('黃')) return 1; // 黃色
+    final c = innerCode ?? '';
+    if (c.endsWith('B')) return 3;
+    if (c.endsWith('R')) return 2;
+    return 1; // 黄色
   }
 
   // HSWW 等级映射
@@ -89,18 +103,21 @@ class _WeatherWarningBarState extends State<WeatherWarningBar> {
           if (actionCode == 'CANCEL') continue;
 
           final name = warn['name']?.toString() ?? code;
+          // 真正的等级（颜色/信号号）在 type 与 inner code 字段，不在 name
+          final type = warn['type']?.toString();
+          final innerCode = warn['code']?.toString();
           final issueTime = warn['issueTime']?.toString() ?? '';
           final updateTime = warn['updateTime']?.toString() ?? issueTime;
           final expireTime = warn['expireTime']?.toString();
 
           final priority = _priority[code] ?? 5;
 
-          // 获取警告等级
+          // 获取警告等级（颜色/信号号实际在 type 与 inner code 字段）
           int level = 1;
           if (code == 'WTCSGNL') {
             level = _typhoonLevel(warn);
           } else if (code.startsWith('WRAIN')) {
-            level = _rainstormLevel(code);
+            level = _rainstormLevel(type, innerCode);
           }
 
           items.add(_WarningItem(
@@ -111,6 +128,7 @@ class _WeatherWarningBarState extends State<WeatherWarningBar> {
             issueTime: issueTime,
             updateTime: updateTime,
             expireTime: expireTime,
+            type: type,
           ));
         }
       }
@@ -194,17 +212,19 @@ class _WeatherWarningBarState extends State<WeatherWarningBar> {
   }
 
   String _warningText(_WarningItem w) {
-    final levelStr = w.code == 'HSWW'
-        ? {'AMBER': '黃色', 'RED': '紅色', 'BLACK': '黑色'}[w.warningLevel] ?? ''
-        : '';
+    if (w.code == 'HSWW') {
+      final levelStr = {'AMBER': '黃色', 'RED': '紅色', 'BLACK': '黑色'}[w.warningLevel] ?? '';
+      return '$levelStr工作暑熱警告 現正生效';
+    }
     if (w.code == 'WTCSGNL') {
-      return '$levelStr${w.name}${w.level > 1 ? '' : ''} 現正生效';
+      // w.type 如 "八號東北" / "三號" / "十號"；缺省时按等级补 "X號"
+      final sig = w.type?.isNotEmpty == true ? w.type! : '${w.level}號';
+      return '$sig熱帶氣旋警告信號 現正生效';
     }
     if (w.code.startsWith('WRAIN')) {
-      return '${w.name}信號 現正生效';
-    }
-    if (w.code == 'HSWW') {
-      return '$levelStr工作暑熱警告 現正生效';
+      // w.type 如 "黃色"/"紅色"/"黑色"，正确显示黃/紅/黑雨
+      final color = w.type?.isNotEmpty == true ? w.type! : '';
+      return '${color}暴雨警告 現正生效';
     }
     return '${w.name} 現正生效';
   }
@@ -319,6 +339,7 @@ class _WarningItem {
   final String? expireTime;
   final String? description;
   final String? warningLevel; // HSWW: AMBER/RED/BLACK
+  final String? type;         // HKO warnsum type 字段（暴雨: 黃色/紅色/黑色；台风: 八號東北/三號/十號）
 
   _WarningItem({
     required this.code,
@@ -330,5 +351,6 @@ class _WarningItem {
     this.expireTime,
     this.description,
     this.warningLevel,
+    this.type,
   });
 }

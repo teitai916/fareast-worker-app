@@ -124,7 +124,7 @@ class _NonCompliantListPageState extends State<NonCompliantListPage> {
               _infoRow('地盤', e.siteName ?? '-'),
               _infoRow('分判商', e.companyName ?? '-'),
               _infoRow('評估期', '${e.periodYear}年第${e.periodQuarter}季度'),
-              _infoRow('總分', '${e.totalScore ?? 0} / 210'),
+              _infoRow('總分', '${e.totalScore ?? 0} / 220'),
               if (e.approvedByName != null) _infoRow('審批人', e.approvedByName!),
               if (e.remarks != null && e.remarks!.isNotEmpty)
                 _infoRow('備註', e.remarks!),

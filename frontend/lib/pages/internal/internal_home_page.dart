@@ -518,11 +518,14 @@ class _InternalHomePageState extends State<InternalHomePage> {
   // ==================== 锁卡工人解锁 ====================
 
   Future<void> _unlockWorker(Map<String, dynamic> worker) async {
+    debugPrint('[InternalPage] _unlockWorker 开始, workerId=${worker['id']}');
     try {
       await _api.toggleWorkerLock(worker['id'] as int, false);
+      debugPrint('[InternalPage] _unlockWorker 成功');
       _showSnackBar('已解鎖', isError: false);
       _loadLockedWorkers();
     } catch (e) {
+      debugPrint('[InternalPage] _unlockWorker 失败: $e');
       _showSnackBar('解鎖失敗：${e.toString().replaceFirst("Exception: ", "")}');
     }
   }
@@ -807,7 +810,7 @@ class _InternalHomePageState extends State<InternalHomePage> {
   Widget _buildQuickActions() {
     final canCheckIn = _hasSite;
     return Wrap(
-      spacing: 8,
+      spacing: 6,
       runSpacing: 8,
       children: [
         _quickAction(Icons.fingerprint, '打卡', canCheckIn, () => _internalCheckIn()),
@@ -830,7 +833,7 @@ class _InternalHomePageState extends State<InternalHomePage> {
     return GestureDetector(
       onTap: disabled ? null : onTap,
       child: Container(
-        width: 76,
+        width: 70,
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
           color: disabled ? Colors.grey.shade100 : Colors.white,

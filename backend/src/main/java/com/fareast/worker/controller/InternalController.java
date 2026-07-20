@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestController
 @RequestMapping("/internal")
-@PreAuthorize("hasAnyRole('SITE_MANAGER','PROJECT_MANAGER','SUPER_ADMIN')")
+@PreAuthorize("hasAnyRole('SITE_MANAGER','PROJECT_MANAGER','INSTALL_MANAGER','SAFETY_OFFICER','SUPER_ADMIN')")
 public class InternalController {
 
     @Autowired
@@ -531,10 +531,12 @@ public class InternalController {
     }
 
     @PostMapping("/workers/{id}/toggle-lock")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','SAFETY_ADMIN')")
     public ApiResponse<Void> toggleLock(
             @PathVariable Long id,
             @RequestBody Map<String, Object> body) {
         boolean lock = Boolean.TRUE.equals(body.get("lock"));
+        log.info("toggleLock 请求: workerId={}, lock={}", id, lock);
         if (lock) {
             adminService.lockCard(id);
         } else {
@@ -571,7 +573,9 @@ public class InternalController {
         }
 
         // 按手机号查找用户
-        User targetUser = userRepository.findByPhone(phone.trim())
+        String phoneTrimmed = phone.trim();
+        log.info("blacklistByPhone 查询手机号: '{}'", phoneTrimmed);
+        User targetUser = userRepository.findByPhone(phoneTrimmed)
                 .orElseThrow(() -> new BusinessException(404, "未找到該手機號碼的工人"));
 
         // 查找 WorkerProfile
@@ -776,6 +780,37 @@ public class InternalController {
         Map<String, Object> result = new HashMap<>();
         result.put("warnsum", weatherWarningService.getWarnsum());
         result.put("hsww", weatherWarningService.getHsww());
+        return ApiResponse.success(result);
+    }
+
+    // ==================== Companies ====================
+
+    /** 获取所有公司列表（供内部人和安全人员使用） */
+    @GetMapping("/companies")
+    public ApiResponse<List<Map<String, Object>>> getCompanies() {
+        List<Company> companies = companyRepository.findAll();
+        List<Map<String, Object>> result = companies.stream().map(c -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", c.getId());
+            m.put("name", c.getName());
+            m.put("type", c.getType().name());
+            return m;
+        }).collect(Collectors.toList());
+        return ApiResponse.success(result);
+    }
+
+    /** 获取所有地盘列表 */
+    @GetMapping("/sites")
+    public ApiResponse<List<Map<String, Object>>> getSites() {
+        List<Site> sites = siteRepository.findAll();
+        List<Map<String, Object>> result = sites.stream().map(s -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", s.getId());
+            m.put("name", s.getName());
+            m.put("address", s.getAddress());
+            m.put("companyId", s.getCompanyId());
+            return m;
+        }).collect(Collectors.toList());
         return ApiResponse.success(result);
     }
 }

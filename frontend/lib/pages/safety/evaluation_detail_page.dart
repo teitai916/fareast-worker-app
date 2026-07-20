@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fareast_worker_app/config/safety_score_config.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/models/contractor_safety_evaluation.dart';
 import 'package:fareast_worker_app/models/user_role.dart';
@@ -222,7 +223,7 @@ class _EvaluationDetailPageState extends State<EvaluationDetailPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _statBox('總分', '${e.totalScore ?? 0} / 210', AppTheme.primaryColor),
+                          _statBox('總分', '${e.totalScore ?? 0} / 220', AppTheme.primaryColor),
                           _statBox('百分比', '${e.percentage?.toStringAsFixed(1) ?? "0"}%',
                               _colorForPercentage(e.percentage ?? 0)),
                           _statBox('等級', e.nonCompliantLabel, _colorForLevel(e.nonCompliantLevel ?? 'NONE')),
@@ -332,22 +333,7 @@ class _EvaluationDetailPageState extends State<EvaluationDetailPage> {
 
   /// 按类别分组显示评分明细
   List<Widget> _buildScoreDetails(Map<String, int?> scores) {
-    const categories = {
-      '安全投放資源表現': [
-        '管理层安全态度', '具備足夠能力的安全人員', '提供安全訓練、指示及監督',
-        '地盤安全設施之提供及維持', '合作性', '提供予屬下員工及使用個人保護裝置',
-        '安全意外率', '安全表現',
-      ],
-      '地盤實地安環表現': [
-        '提供施工方案及風險評估', '聘請安全督導員', '起重機械/裝置證書',
-        '高空工作', '個人防護裝備使用情況', '施工/物料擺放位置整潔',
-        '依照施工方案進行工序', '改善態度', '參與早會及安全施工程序會議',
-        '提供合適的工具',
-      ],
-      '安全表現': [
-        '合約安全守則', '法例(包括工作守則)', '工傷事故記錄',
-      ],
-    };
+    const categories = SafetyScoreConfig.categories;
 
     final List<Widget> widgets = [];
     for (final entry in categories.entries) {
@@ -355,7 +341,8 @@ class _EvaluationDetailPageState extends State<EvaluationDetailPage> {
         padding: const EdgeInsets.only(top: 12, bottom: 4),
         child: Text(entry.key, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.primaryColor)),
       ));
-      for (final key in entry.value) {
+      for (final index in entry.value) {
+        final key = SafetyScoreConfig.name(index);
         final value = scores[key];
         widgets.add(Padding(
           padding: const EdgeInsets.symmetric(vertical: 3),
