@@ -1021,6 +1021,8 @@ class _ContractorHomePageState extends State<ContractorHomePage>
             ),
           ),
           const SizedBox(height: 24),
+          _buildMenuItem(Icons.lock_outline, '修改密碼', _showChangePasswordDialog),
+          const SizedBox(height: 8),
           _buildBiometricToggle(),
           const SizedBox(height: 8),
           _buildMenuItem(Icons.logout, '退出登录', () => Navigator.pushReplacementNamed(context, '/login'), color: AppTheme.errorColor),
@@ -1116,6 +1118,85 @@ class _ContractorHomePageState extends State<ContractorHomePage>
         onTap: _toggleBiometric,
       ),
     );
+  }
+
+  Future<void> _showChangePasswordDialog() async {
+    final pwCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('修改密碼'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: pwCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: '新密碼（至少6位）',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: '確認新密碼',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () async {
+              final pw = pwCtrl.text.trim();
+              final confirm = confirmCtrl.text.trim();
+              if (pw.isEmpty || confirm.isEmpty) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('請填寫新密碼'), backgroundColor: AppTheme.errorColor),
+                );
+                return;
+              }
+              if (pw.length < 6) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('密碼長度至少為6位'), backgroundColor: AppTheme.errorColor),
+                );
+                return;
+              }
+              if (pw != confirm) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('兩次輸入的密碼不一致'), backgroundColor: AppTheme.errorColor),
+                );
+                return;
+              }
+              Navigator.pop(ctx, true);
+            },
+            child: const Text('確認'),
+          ),
+        ],
+      ),
+    );
+    final newPw = pwCtrl.text.trim();
+    pwCtrl.dispose();
+    confirmCtrl.dispose();
+    if (result == true) {
+      try {
+        await _api.changePassword(newPw);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('密碼修改成功'), backgroundColor: AppTheme.successColor),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('修改失敗：${e.toString().replaceFirst("Exception: ", "")}'), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    }
   }
 
   Widget _buildMenuItem(IconData icon, String title, VoidCallback onTap, {Color? color}) {

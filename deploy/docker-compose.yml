@@ -121,8 +121,8 @@ services:
       # 时区
       TZ: Asia/Hong_Kong
     volumes:
-      # 上传文件持久化
-      - uploads-data:/app/uploads
+      # 上传文件持久化（宿主机 /data 目录）
+      - /data/uploads:/data/uploads
       # 日志持久化
       - logs-data:/app/logs
     # 后端不直接暴露端口，仅通过 Nginx 反向代理访问

@@ -67,7 +67,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         // 注意：request.getRequestURI() 返回完整路径（包含context-path）
         // 但因为 context-path 是 /api/v1，所以需要判断完整路径
-        return path.startsWith("/api/v1/auth/");
+        return path.startsWith("/api/v1/auth/")
+                && !path.equals("/api/v1/auth/change-password");
     }
 
     private String extractTokenFromRequest(HttpServletRequest request) {

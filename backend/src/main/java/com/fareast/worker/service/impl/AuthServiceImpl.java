@@ -224,6 +224,19 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    @Transactional
+    public void changePassword(Long userId, String newPassword) {
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new BusinessException(400, "密碼長度至少為6位");
+        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(404, "用戶不存在"));
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+        log.info("密碼修改成功: userId={}", userId);
+    }
+
+    @Override
     public Map<String, Object> refresh(String refreshToken) {
         // Validate the existing token
         if (!jwtTokenProvider.validateToken(refreshToken)) {

@@ -37,6 +37,7 @@ import com.fareast.worker.service.WeatherWarningService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -68,6 +69,9 @@ public class WorkerController {
 
     @Autowired
     private WorkerService workerService;
+
+    @Value("${file.upload-dir}")
+    private String uploadDir;
 
     @Autowired
     private SiteService siteService;
@@ -704,11 +708,11 @@ public class WorkerController {
 
             contractAttachmentName = originalFilename;
             try {
-                String uploadDir = System.getProperty("user.dir") + "/uploads/contracts/";
-                java.io.File dir = new java.io.File(uploadDir);
+                String contractDir = uploadDir + "/contracts/";
+                java.io.File dir = new java.io.File(contractDir);
                 if (!dir.exists()) dir.mkdirs();
                 String fileName = java.util.UUID.randomUUID().toString() + "_" + contractFile.getOriginalFilename();
-                java.io.File destFile = new java.io.File(uploadDir + fileName);
+                java.io.File destFile = new java.io.File(contractDir + fileName);
                 contractFile.transferTo(destFile);
                 contractAttachment = "/api/v1/uploads/contracts/" + fileName;
                 log.info("文件上传成功: {}", contractAttachment);

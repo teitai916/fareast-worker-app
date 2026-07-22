@@ -4,6 +4,9 @@
 # 环境变量在 docker-compose.yml / .env 中定义
 # =============================================
 
+server:
+  forward-headers-strategy: framework    # 解析 Nginx X-Forwarded-* 头，正确构造外网 URL
+
 spring:
   datasource:
     url: ${SPRING_DATASOURCE_URL}
@@ -61,6 +64,10 @@ face:
 feishu:
   app-id: ${FEISHU_APP_ID:}
   app-secret: ${FEISHU_APP_SECRET:}
+
+# 文件上传目录
+file:
+  upload-dir: /data/uploads
 
 # 生产日志级别
 logging:

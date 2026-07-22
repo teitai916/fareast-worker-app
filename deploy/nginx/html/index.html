@@ -63,6 +63,58 @@ h1{color:#1a1a2e;font-size:22px;margin-bottom:6px}
 <div id="smsResult" class="result" style="display:none"></div>
 </div>
 
+<!-- 快速创建账号 -->
+<div class="card">
+<h2>🔧 快速创建账号（无需短信服务）</h2>
+<p class="note" style="margin-bottom:12px">流程：填写信息 → 发送验证码 → 在服务器执行 Redis 命令取回验证码 → 填入 → 注册。</p>
+
+<div class="tabs" style="margin-bottom:12px">
+  <div class="tab active" onclick="switchRoleTab('WORKER')" id="tabWorker">👷 工人 WORKER</div>
+  <div class="tab" onclick="switchRoleTab('CONTRACTOR')" id="tabContractor">👔 判头 CONTRACTOR</div>
+</div>
+
+<div class="row">
+  <input id="qPhone" placeholder="手机号（8位香港 / 11位大陆）" style="flex:3" oninput="autoCountryCode()">
+  <input id="qCountryCode" placeholder="区号" style="flex:1;max-width:100px" value="+852">
+</div>
+<div class="row">
+  <input id="qPassword" placeholder="密码" value="123456" style="flex:2">
+  <input id="qChName" placeholder="中文姓名" style="flex:2">
+</div>
+
+<div id="workerExtra">
+  <div class="row">
+    <input id="qEngName" placeholder="英文名" style="flex:2">
+    <input id="qBirthDate" placeholder="出生日期 (yyyy-MM-dd)" style="flex:2">
+  </div>
+</div>
+
+<div id="contractorExtra" style="display:none">
+  <div class="row">
+    <input id="qCompanyId" placeholder="公司ID（数字）" type="number" style="flex:2">
+    <small class="note">公司ID查询：<a href="#" onclick="listCompanies();return false" style="color:#1677ff">点击查看</a></small>
+  </div>
+</div>
+
+<div class="row" style="margin-top:8px">
+  <input id="qCode" placeholder="验证码（6位数字）" maxlength="6" style="flex:2;max-width:200px">
+  <button class="btn btn-warning btn-sm" onclick="showRedisCmd()">📋 查看Redis命令</button>
+</div>
+<div class="row" style="margin-top:4px">
+  <button class="btn btn-success" onclick="sendSmsAndShow()" style="flex:1">1️⃣ 发送验证码</button>
+  <button class="btn btn-primary" onclick="doQuickRegister()" style="flex:1">2️⃣ 注册</button>
+</div>
+
+<div id="redisCmdBox" style="display:none;background:#1a1a2e;color:#a6e22e;padding:12px;border-radius:6px;margin-top:10px;font-size:12px;position:relative">
+  <div style="color:#f8f8f2;margin-bottom:6px">⬇️ 在服务器执行此命令获取验证码：</div>
+  <code id="redisCmdText" style="word-break:break-all;font-size:12px"></code>
+  <button onclick="copyRedisCmd()" style="position:absolute;top:8px;right:8px;background:#333;color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer">复制</button>
+</div>
+
+<div id="companyListBox" style="display:none;margin-top:10px"></div>
+<div id="quickResult" class="result" style="display:none"></div>
+</div>
+
 <!-- 健康檢查 -->
 <div class="card">
 <h2>服務狀態</h2>
@@ -124,6 +176,140 @@ async function checkHealth() {
         showResult('healthResult', status + ' 整體: ' + json.status + '\n\n' + JSON.stringify(json.components, null, 2));
     } catch (e) {
         showResult('healthResult', '❌ 無法連接: ' + e.message);
+    }
+}
+
+// ===== 快速创建账号 =====
+let quickRole = 'WORKER';
+
+function switchRoleTab(role) {
+    quickRole = role;
+    document.getElementById('tabWorker').className = 'tab' + (role === 'WORKER' ? ' active' : '');
+    document.getElementById('tabContractor').className = 'tab' + (role === 'CONTRACTOR' ? ' active' : '');
+    document.getElementById('workerExtra').style.display = role === 'WORKER' ? 'block' : 'none';
+    document.getElementById('contractorExtra').style.display = role === 'CONTRACTOR' ? 'block' : 'none';
+}
+
+function autoCountryCode() {
+    const phone = document.getElementById('qPhone').value.replace(/\D/g, '');
+    document.getElementById('qCountryCode').value = phone.length >= 11 ? '+86' : '+852';
+}
+
+function getPhone() { return document.getElementById('qPhone').value.replace(/\D/g, ''); }
+
+function redisCmdFor(phone) {
+    return 'docker compose exec redis redis-cli -a "$(grep REDIS_PASSWORD ~/deploy/.env | cut -d= -f2)" --no-auth-warning GET "sms:code:' + phone + '"';
+}
+
+function showRedisCmd() {
+    var phone = getPhone();
+    if (!phone || phone.length < 8) { alert('请先输入有效手机号'); return; }
+    document.getElementById('redisCmdText').textContent = redisCmdFor(phone);
+    document.getElementById('redisCmdBox').style.display = 'block';
+}
+
+function copyRedisCmd() {
+    var cmd = document.getElementById('redisCmdText').textContent;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(cmd).then(function() { alert('已复制到剪贴板'); });
+    } else {
+        prompt('手动复制:', cmd);
+    }
+}
+
+async function sendSmsAndShow() {
+    var phone = getPhone();
+    if (!phone || phone.length < 8) { alert('请输入有效手机号'); return; }
+
+    document.getElementById('quickResult').style.display = 'none';
+    document.getElementById('redisCmdBox').style.display = 'none';
+
+    var r = await request('POST', '/auth/send-sms', { phone: phone });
+    document.getElementById('redisCmdText').textContent = redisCmdFor(phone);
+    document.getElementById('redisCmdBox').style.display = 'block';
+
+    if (r.error) {
+        showResult('quickResult', '❌ 发送失败: ' + r.error);
+    } else {
+        if (r.data && r.data.code === 200) {
+            showResult('quickResult', '✅ 验证码已生成（5分钟有效）\n请复制上方 Redis 命令到服务器执行，获取验证码后填入左侧输入框。');
+        } else {
+            showResult('quickResult', '⚠️ 该号码可能已注册（系统不返回验证码）\n请换一个未注册的手机号。');
+        }
+    }
+}
+
+async function doQuickRegister() {
+    var phone = getPhone();
+    var password = document.getElementById('qPassword').value;
+    var code = document.getElementById('qCode').value;
+    var countryCode = document.getElementById('qCountryCode').value;
+    var chName = document.getElementById('qChName').value || phone;
+
+    if (!phone || phone.length < 8) { alert('请输入有效手机号'); return; }
+    if (!password || password.length < 6) { alert('密码至少6位'); return; }
+    if (code.length !== 6) { alert('验证码需为6位数字'); return; }
+
+    var body = {
+        phone: phone,
+        password: password,
+        verificationCode: code,
+        countryCode: countryCode,
+        name: chName,
+        chineseName: chName,
+        role: quickRole
+    };
+
+    if (quickRole === 'WORKER') {
+        var bd = document.getElementById('qBirthDate').value;
+        if (!bd || !/^\d{4}-\d{2}-\d{2}$/.test(bd)) { alert('工人注册必须填写出生日期 (yyyy-MM-dd)，如 1990-01-01'); return; }
+        body.birthDate = bd;
+        body.englishName = document.getElementById('qEngName').value || chName;
+    }
+
+    if (quickRole === 'CONTRACTOR') {
+        var cid = document.getElementById('qCompanyId').value;
+        if (!cid) { alert('判头注册必须填写公司ID（数字）。点击下方"公司ID查询"获取。'); return; }
+        body.companyId = parseInt(cid);
+    }
+
+    document.getElementById('quickResult').style.display = 'block';
+    document.getElementById('quickResult').textContent = '注册中...';
+
+    var r = await request('POST', '/auth/register', body);
+    document.getElementById('redisCmdBox').style.display = 'none';
+
+    if (r.data && r.data.code === 200) {
+        var d = r.data.data;
+        showResult('quickResult', '✅ 注册成功！\n手机号: ' + phone + '\n角色: ' + quickRole +
+            '\n用户ID: ' + (d.user ? d.user.id : d.id) + '\n' + JSON.stringify(d, null, 2));
+    } else {
+        showResult('quickResult', '❌ 注册失败\n' + JSON.stringify(r, null, 2));
+    }
+}
+
+async function listCompanies() {
+    var token = localStorage.getItem('token');
+    if (!token) {
+        document.getElementById('companyListBox').style.display = 'block';
+        document.getElementById('companyListBox').innerHTML = '<div class="result" style="margin:0">⚠️ 请先用已注册账号登录，再查询公司列表。</div>';
+        return;
+    }
+    document.getElementById('companyListBox').style.display = 'block';
+    document.getElementById('companyListBox').innerHTML = '<div class="result" style="margin:0">查询中...</div>';
+    try {
+        var res = await fetch(base + '/companies', { headers: { 'Authorization': 'Bearer ' + token } });
+        var json = await res.json();
+        if (json.code === 200 && json.data && json.data.length) {
+            var html = '<div class="result" style="margin:0;max-height:200px"><b>公司列表（ID → 名称）：</b>\n';
+            json.data.forEach(function(c) { html += '  ' + c.id + ' → ' + (c.name || c.companyName || '未知') + '\n'; });
+            html += '</div>';
+            document.getElementById('companyListBox').innerHTML = html;
+        } else {
+            document.getElementById('companyListBox').innerHTML = '<div class="result" style="margin:0">无公司数据，或 API 返回异常。</div>';
+        }
+    } catch(e) {
+        document.getElementById('companyListBox').innerHTML = '<div class="result" style="margin:0">查询失败: ' + e.message + '</div>';
     }
 }
 </script>

@@ -35,7 +35,7 @@ spring:
 
   web:
     resources:
-      static-locations: file:./uploads/
+      static-locations: file:/data/uploads/
 
   servlet:
     multipart:
@@ -45,7 +45,7 @@ spring:
 
 # 文件上传目录
 file:
-  upload-dir: ./uploads
+  upload-dir: /data/uploads
 
 # 打卡地理围栏
 checkin:

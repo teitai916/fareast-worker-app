@@ -20,6 +20,7 @@ import com.fareast.worker.model.entity.User;
 import com.fareast.worker.repository.CompanyRepository;
 import com.fareast.worker.repository.UserRepository;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 
@@ -67,6 +68,23 @@ public class AuthController {
     @PostMapping("/reset-password")
     public ApiResponse<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
+        return ApiResponse.success(null);
+    }
+
+    @PostMapping("/change-password")
+    public ApiResponse<Void> changePassword(@AuthenticationPrincipal String userId,
+                                            @RequestBody Map<String, String> body) {
+        if (userId == null || userId.isBlank()) {
+            return ApiResponse.error(401, "未登入或 token 已過期");
+        }
+        String newPassword = body.get("newPassword");
+        if (newPassword == null || newPassword.trim().isEmpty()) {
+            return ApiResponse.error(400, "新密碼不能為空");
+        }
+        if (newPassword.length() < 6) {
+            return ApiResponse.error(400, "密碼長度至少為6位");
+        }
+        authService.changePassword(Long.valueOf(userId), newPassword.trim());
         return ApiResponse.success(null);
     }
 

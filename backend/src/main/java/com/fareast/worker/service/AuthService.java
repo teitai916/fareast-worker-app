@@ -35,4 +35,9 @@ public interface AuthService {
      * Get current user info by userId (extracted from JWT by the controller).
      */
     User getCurrentUser(Long userId);
+
+    /**
+     * Change password for logged-in user (no old password required).
+     */
+    void changePassword(Long userId, String newPassword);
 }

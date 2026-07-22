@@ -228,6 +228,17 @@ class ApiService {
     _handleError(resp);
   }
 
+  /// 修改密碼（已登入用戶，無需輸入原密碼）
+  Future<void> changePassword(String newPassword) async {
+    if (ApiConfig.mockMode) return;
+    final resp = await _client.post(
+      Uri.parse('$baseUrl/auth/change-password'),
+      headers: ApiConfig.headers(token: token),
+      body: jsonEncode({'newPassword': newPassword}),
+    );
+    _handleError(resp);
+  }
+
   /// 登出
   Future<void> logout() async {
     await TokenManager.clear();
