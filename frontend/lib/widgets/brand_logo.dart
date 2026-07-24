@@ -49,7 +49,7 @@ class BrandLogo extends StatelessWidget {
         if (showText) ...[
           const SizedBox(height: 12),
           Text(
-            '遠東工友通',
+            '遠東智工',
             style: TextStyle(
               fontSize: size * 0.38,
               fontWeight: FontWeight.bold,

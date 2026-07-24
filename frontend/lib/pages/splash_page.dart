@@ -187,7 +187,7 @@ class _SplashPageState extends State<SplashPage>
                 ),
                 const SizedBox(height: 28),
                 const Text(
-                  '遠東工友通',
+                  '遠東智工',
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,

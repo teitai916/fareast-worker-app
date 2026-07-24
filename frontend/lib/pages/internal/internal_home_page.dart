@@ -596,14 +596,14 @@ class _InternalHomePageState extends State<InternalHomePage> {
 
     if (_loading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('遠東工友'), automaticallyImplyLeading: false),
+        appBar: AppBar(title: const Text('遠東智工'), automaticallyImplyLeading: false),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('遠東工友'),
+        title: const Text('遠東智工'),
         automaticallyImplyLeading: false,
         actions: [
           GestureDetector(

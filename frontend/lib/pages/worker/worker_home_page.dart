@@ -244,7 +244,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
     if (_loading) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('遠東工友通'),
+          title: const Text('遠東智工'),
           automaticallyImplyLeading: false,
         ),
         body: const Center(child: CircularProgressIndicator()),
@@ -254,7 +254,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
     if (_error != null) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('遠東工友通'),
+          title: const Text('遠東智工'),
           automaticallyImplyLeading: false,
         ),
         body: Center(
@@ -275,7 +275,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('遠東工友通'),
+        title: const Text('遠東智工'),
         automaticallyImplyLeading: false,
         actions: [
           if (!hasSite && !_isLocked && !_hasPendingApplication)
