@@ -1,7 +1,7 @@
 name: fareast_worker_app
 description: 遠東工友通 - 香港建築工地工人安全管理平台，由遠東幕牆打造
 publish_to: 'none'
-version: 1.1+2
+version: 1.1.0+3
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
