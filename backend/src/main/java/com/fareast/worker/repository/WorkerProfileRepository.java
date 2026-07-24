@@ -14,11 +14,9 @@ public interface WorkerProfileRepository extends JpaRepository<WorkerProfile, Lo
 
     Optional<WorkerProfile> findByWorkerNumber(String workerNumber);
 
-    List<WorkerProfile> findByCurrentSiteId(Long siteId);
-
     List<WorkerProfile> findByBlacklistedTrue();
 
     List<WorkerProfile> findByCardLockedTrue();
 
-    List<WorkerProfile> findByCurrentCompanyId(Long companyId);
+    List<WorkerProfile> findByCompanyId(Long companyId);
 }

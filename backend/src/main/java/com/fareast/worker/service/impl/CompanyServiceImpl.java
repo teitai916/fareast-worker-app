@@ -35,11 +35,11 @@ public class CompanyServiceImpl implements CompanyService {
         WorkerProfile profile = workerProfileRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException(404, "工人資料不存在"));
 
-        if (profile.getCurrentCompanyId() == null) {
+        if (profile.getCompanyId() == null) {
             throw new BusinessException(404, "目前未分配公司");
         }
 
-        return companyRepository.findById(profile.getCurrentCompanyId())
+        return companyRepository.findById(profile.getCompanyId())
                 .orElseThrow(() -> new BusinessException(404, "公司信息不存在"));
     }
 
@@ -65,7 +65,7 @@ public class CompanyServiceImpl implements CompanyService {
         // Create request
         CompanyChangeRequest request = CompanyChangeRequest.builder()
                 .workerId(profile.getId())
-                .fromCompanyId(profile.getCurrentCompanyId())
+                .fromCompanyId(profile.getCompanyId())
                 .toCompanyId(targetCompanyId)
                 .reason(reason)
                 .status(AuditStatus.PENDING)
@@ -74,7 +74,7 @@ public class CompanyServiceImpl implements CompanyService {
 
         companyChangeRequestRepository.save(request);
         log.info("轉公司申請已提交: workerId={}, fromCompanyId={}, toCompanyId={}",
-                profile.getId(), profile.getCurrentCompanyId(), targetCompanyId);
+                profile.getId(), profile.getCompanyId(), targetCompanyId);
     }
 
     @Override

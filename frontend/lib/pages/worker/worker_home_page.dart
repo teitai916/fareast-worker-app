@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
 import 'package:fareast_worker_app/services/biometric_service.dart';
+import 'package:fareast_worker_app/services/checkin_reminder_service.dart';
 import 'package:fareast_worker_app/pages/worker/change_site_page.dart';
 import 'package:fareast_worker_app/pages/worker/change_company_page.dart';
 import 'package:fareast_worker_app/pages/worker/attendance_page.dart';
@@ -41,12 +43,21 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
   bool _checkInAllowed = true; // 必修安全影片是否全部完成
   bool _isLocked = false; // 是否被鎖卡/黑名單
   bool _hasPendingApplication = false; // 是否有待審核的申請
+  List<Map<String, dynamic>> _mySites = []; // 已加入的地盘列表（多地盘支持）
+  bool _hasSite = false; // 是否有当前地盘
+  int? _selectedSiteId; // 用户手动选择的地盘（本地持久化）
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
+    _loadSavedSite();
     _loadData();
+  }
+
+  Future<void> _loadSavedSite() async {
+    final prefs = await SharedPreferences.getInstance();
+    _selectedSiteId = prefs.getInt('selected_site_id');
   }
 
   @override
@@ -99,7 +110,6 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
       setState(() {
         _homeData = data;
         _profile = data['profile'];
-        _currentSite = data['currentSite'];
         _todayAttendance = todayAtt;
         _workerNumber = _profile?['workerNumber'];
         _siteSafetyScore = siteSafetyScore;
@@ -108,10 +118,25 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
         // 檢查是否被鎖卡或黑名單：只要任一為 true 就鎖定
         _isLocked = (_profile?['cardLocked'] == true || _profile?['blacklisted'] == true);
         _hasPendingApplication = data['pendingApplication'] != null;
+        _mySites = (data['mySites'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        _hasSite = _mySites.isNotEmpty;
+
+        // 还原用户上次选择的地盘到第一位
+        if (_selectedSiteId != null) {
+          final idx = _mySites.indexWhere((s) => s['siteId'] == _selectedSiteId);
+          if (idx > 0) {
+            final selected = _mySites.removeAt(idx);
+            _mySites.insert(0, selected);
+          }
+        }
+        // currentSite 跟随 mySites[0]
+        _currentSite = _mySites.isEmpty ? null : Map<String, dynamic>.from(_mySites[0]);
         _loading = false;
       });
       // 读取生物识别开关状态
       _refreshBiometricState();
+      // 调度打卡提醒（首次加载时自动调度，避免重复）
+      CheckinReminderService.schedule();
     } catch (e) {
       if (!mounted) return;
       setState(() { _loading = false; _error = e.toString(); });
@@ -246,7 +271,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
 
     final siteName = _currentSite?['name'];
     final hasSite = siteName != null;
-    final hasCompany = (_profile?['currentCompanyId'] as int?) != null;
+    final hasCompany = (_profile?['companyId'] as int?) != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -297,25 +322,33 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                     Text('編號：${_workerNumber ?? '—'}',
                         style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12)),
                     const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _isLocked ? AppTheme.errorColor.withOpacity(0.3) : Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _isLocked ? Icons.lock : (hasSite ? Icons.location_on : Icons.location_off),
-                            color: Colors.white, size: 16,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            _isLocked ? '帳號已被鎖定' : (hasSite ? siteName : '暫無地盤，請申請加入'),
-                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-                          ),
-                        ],
+                    // 地盘信息 - 可点击切换（多地盘支持）
+                    GestureDetector(
+                      onTap: (_hasSite || _mySites.isNotEmpty) && !_isLocked ? _showSiteSwitcher : null,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _isLocked ? AppTheme.errorColor.withOpacity(0.3) : Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _isLocked ? Icons.lock : (_hasSite ? Icons.location_on : Icons.location_off),
+                              color: Colors.white, size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _isLocked ? '帳號已被鎖定' : (_hasSite ? (siteName ?? '未知地盤') : '暫無地盤'),
+                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                            ),
+                            if (_mySites.length > 1 && !_isLocked) ...[
+                              const SizedBox(width: 4),
+                              Icon(Icons.arrow_drop_down, color: Colors.white.withOpacity(0.7), size: 20),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -552,9 +585,15 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                             ),
                           )
                         : ElevatedButton.icon(
-                            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangeSitePage())),
+                            onPressed: () {
+                              if (_mySites.length > 1) {
+                                _showSiteSwitcher();
+                              } else {
+                                Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangeSitePage()));
+                              }
+                            },
                             icon: const Icon(Icons.swap_horiz, size: 20),
-                            label: const Text('更換地盤'),
+                            label: Text(_mySites.length > 1 ? '切換地盤' : '更換地盤'),
                           ),
                   ),
                 ] else ...[
@@ -751,6 +790,100 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
     );
   }
 
+  // ==================== 多地盘切换 ====================
+
+  void _showSiteSwitcher() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('切換地盤', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              if (_mySites.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 32),
+                  child: Center(child: Text('暫未加入任何地盤', style: TextStyle(color: AppTheme.textSecondary))),
+                )
+              else
+                ..._mySites.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final site = entry.value;
+                  final name = site['name'] ?? '未知地盤';
+                  // 第一个地盘作为默认显示（index 0）
+                  return ListTile(
+                    leading: Icon(
+                      idx == 0 ? Icons.check_circle : Icons.location_on,
+                      color: idx == 0 ? AppTheme.primaryColor : AppTheme.textHint,
+                    ),
+                    title: Text(name, style: TextStyle(
+                      fontWeight: idx == 0 ? FontWeight.bold : FontWeight.normal,
+                      color: idx == 0 ? AppTheme.primaryColor : AppTheme.textPrimary,
+                    )),
+                    subtitle: site['address'] != null ? Text(site['address'], style: const TextStyle(fontSize: 12)) : null,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _selectSite(site['siteId'] as int, name);
+                    },
+                  );
+                }),
+              const SizedBox(height: 16),
+              // 申请加入地盘入口
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _showApplySiteSheet(context);
+                  },
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('申請加入新地盤'),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _selectSite(int siteId, String siteName) async {
+    if (!mounted) return;
+    // 持久化用户选择
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('selected_site_id', siteId);
+    _selectedSiteId = siteId;
+    // 切换地盘：更新本地"当前"地盘显示，并刷新首页数据
+    setState(() {
+      final idx = _mySites.indexWhere((s) => s['siteId'] == siteId);
+      if (idx > 0) {
+        final selected = _mySites.removeAt(idx);
+        _mySites.insert(0, selected);
+      }
+      _currentSite = _mySites.isEmpty ? null : Map<String, dynamic>.from(_mySites[0]);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已切換至 $siteName'), backgroundColor: AppTheme.successColor),
+    );
+    _loadData();
+  }
+
   void _showApplySiteSheet(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => SiteApplyPage(onApplied: _loadData)));
   }
@@ -769,8 +902,15 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
       }),
       _QuickActionData(Icons.smart_display, '安全培訓', canTrain, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const SafetyVideosPage()))),
-      _QuickActionData(Icons.swap_horiz, '更換地盤', canChangeSite, () =>
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangeSitePage()))),
+      _QuickActionData(Icons.swap_horiz, _mySites.length > 1 ? '切換地盤' : '更換地盤', canChangeSite, () {
+        if (_mySites.length > 1) {
+          _showSiteSwitcher();
+        } else if (!hasSite) {
+          _showApplySiteSheet(context);
+        } else {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangeSitePage()));
+        }
+      }),
       _QuickActionData(Icons.business, '更換公司', canChangeCompany, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangeCompanyPage()))),
     ];
@@ -852,7 +992,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
   /// 顯示更多功能菜單（BottomSheet）
   void _showMoreMenu() {
     final hasSite = _currentSite != null;
-    final hasCompany = (_profile?['currentCompanyId'] as int?) != null;
+    final hasCompany = (_profile?['companyId'] as int?) != null;
     final canCheckIn = !_isLocked && hasSite && _checkInAllowed;
     final canTrain = !_isLocked && hasSite;
     final canChangeSite = !_isLocked && hasSite;
@@ -864,8 +1004,15 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
       }),
       _QuickActionData(Icons.smart_display, '安全培訓', canTrain, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const SafetyVideosPage()))),
-      _QuickActionData(Icons.swap_horiz, '更換地盤', canChangeSite, () =>
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangeSitePage()))),
+      _QuickActionData(Icons.swap_horiz, _mySites.length > 1 ? '切換地盤' : '更換地盤', canChangeSite, () {
+        if (_mySites.length > 1) {
+          _showSiteSwitcher();
+        } else if (!hasSite) {
+          _showApplySiteSheet(context);
+        } else {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangeSitePage()));
+        }
+      }),
       _QuickActionData(Icons.business, '更換公司', canChangeCompany, () =>
           Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangeCompanyPage()))),
     ];

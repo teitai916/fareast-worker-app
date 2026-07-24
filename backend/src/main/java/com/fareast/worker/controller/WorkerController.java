@@ -11,6 +11,7 @@ import com.fareast.worker.model.entity.SiteChangeRequest;
 import com.fareast.worker.model.entity.WorkerProfile;
 import com.fareast.worker.model.entity.WorkerSiteSafetyScore;
 import com.fareast.worker.model.entity.WorkerCompanyChangeRequest;
+import com.fareast.worker.model.entity.WorkerSite;
 import com.fareast.worker.model.entity.Company;
 import com.fareast.worker.model.entity.BlacklistRecord;
 import com.fareast.worker.model.entity.Notification;
@@ -30,6 +31,7 @@ import com.fareast.worker.repository.CompanyRepository;
 import com.fareast.worker.repository.WorkerCompanyChangeRequestRepository;
 import org.springframework.web.multipart.MultipartFile;
 import com.fareast.worker.repository.WorkerSiteSafetyScoreRepository;
+import com.fareast.worker.repository.WorkerSiteRepository;
 import com.fareast.worker.service.NotificationService;
 import com.fareast.worker.service.SiteService;
 import com.fareast.worker.service.WorkerService;
@@ -104,6 +106,9 @@ public class WorkerController {
     private WorkerSiteSafetyScoreRepository workerSiteSafetyScoreRepository;
 
     @Autowired
+    private WorkerSiteRepository workerSiteRepository;
+
+    @Autowired
     private WorkerCompanyChangeRequestRepository workerCompanyChangeRequestRepository;
 
     @Autowired
@@ -122,21 +127,9 @@ public class WorkerController {
         boolean isBlacklisted = p.getBlacklisted() != null && p.getBlacklisted();
         boolean isCardLocked = p.getCardLocked() != null && p.getCardLocked();
         
-        // 额外检查：如果地盤安全分为 0，也视为锁定（兼容历史数据）
-        boolean siteScoreZero = false;
-        if (p.getCurrentSiteId() != null) {
-            try {
-                java.util.Optional<WorkerSiteSafetyScore> scoreOpt =
-                    workerSiteSafetyScoreRepository.findByWorkerIdAndSiteId(p.getId(), p.getCurrentSiteId());
-                siteScoreZero = scoreOpt.isPresent() && scoreOpt.get().getSafetyScore() != null
-                    && scoreOpt.get().getSafetyScore() == 0;
-            } catch (Exception ignored) {}
-        }
-        
-        m.put("blacklisted", isBlacklisted || siteScoreZero);
-        m.put("cardLocked", isCardLocked || siteScoreZero);
-        m.put("currentSiteId", p.getCurrentSiteId());
-        m.put("currentCompanyId", p.getCurrentCompanyId());
+        m.put("blacklisted", isBlacklisted);
+        m.put("cardLocked", isCardLocked);
+        m.put("companyId", p.getCompanyId());
         m.put("chineseName", p.getChineseName());
         m.put("englishName", p.getEnglishName());
         m.put("safetyCard", p.getSafetyCard());
@@ -151,9 +144,9 @@ public class WorkerController {
         m.put("birthDate", p.getBirthDate() != null ? p.getBirthDate().toString() : null);
         
         // 查詢公司名稱
-        if (p.getCurrentCompanyId() != null) {
+        if (p.getCompanyId() != null) {
             try {
-                Company company = companyRepository.findById(p.getCurrentCompanyId()).orElse(null);
+                Company company = companyRepository.findById(p.getCompanyId()).orElse(null);
                 if (company != null) {
                     m.put("companyName", company.getName());
                 }
@@ -265,7 +258,7 @@ public class WorkerController {
     @GetMapping("/safety-score")
     public ApiResponse<Map<String, Object>> getSafetyScore(@AuthenticationPrincipal String userId) {
         // 安全分已移至按地盤維度管理，返回當前地盤安全分
-        return getSiteSafetyScore(userId);
+        return getSiteSafetyScore(userId, null);
     }
 
     @GetMapping("/deductions")
@@ -294,32 +287,47 @@ public class WorkerController {
         Long uid = Long.valueOf(userId);
         WorkerProfile profile = workerService.getProfile(uid);
 
-        Map<String, Object> currentSiteMap = null;
-        if (profile.getCurrentSiteId() != null) {
-            try {
-                Site s = siteService.getSiteById(profile.getCurrentSiteId());
-                currentSiteMap = toSiteMap(s);
-            } catch (Exception ignored) {
-            }
-        }
+        // 已加入的地盘列表（从 worker_sites 表读取）
+        List<WorkerSite> workerSites = workerSiteRepository.findByWorkerId(profile.getId());
+        List<Map<String, Object>> mySites = workerSites.stream().map(ws -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("siteId", ws.getSiteId());
+            m.put("dailyWage", ws.getDailyWage());
+            m.put("contractAttachment", ws.getContractAttachment());
+            m.put("joinedAt", ws.getJoinedAt() != null ? ws.getJoinedAt().toString() : null);
+            siteRepository.findById(ws.getSiteId()).ifPresent(site -> {
+                m.put("name", site.getName());
+                m.put("address", site.getAddress());
+            });
+            return m;
+        }).collect(Collectors.toList());
+
+        // 当前地盘取 mySites 第一条（前端可自行决定显示哪个）
+        Map<String, Object> currentSiteMap = mySites.isEmpty() ? null : mySites.get(0);
 
         List<SiteApplication> pendingApps = siteApplicationRepository
                 .findByWorkerIdAndStatus(uid, AuditStatus.PENDING);
         boolean hasPendingApplication = !pendingApps.isEmpty();
 
-        // 【新增】检查是否有待审核的公司变更申请
+        // 检查是否有待审核的公司变更申请
         java.util.Optional<WorkerCompanyChangeRequest> pendingCompanyChange = workerCompanyChangeRequestRepository
                 .findByWorkerIdAndStatus(profile.getId(), AuditStatus.PENDING);
         boolean hasPendingCompanyChange = pendingCompanyChange.isPresent();
 
+        // 可用地盘列表（排除已加入的和已申请待审核的）
+        Set<Long> joinedSiteIds = workerSites.stream().map(WorkerSite::getSiteId).collect(Collectors.toSet());
+        // 也排除待审核申请中的地盘
+        Set<Long> appliedSiteIds = pendingApps.stream().map(SiteApplication::getSiteId).collect(Collectors.toSet());
+        joinedSiteIds.addAll(appliedSiteIds);
         List<Map<String, Object>> availableSites = siteService.getAllSites().stream()
+                .filter(s -> !joinedSiteIds.contains(s.getId()))
                 .map(this::toSiteMap)
                 .collect(Collectors.toList());
 
         Map<String, Object> result = new HashMap<>();
         result.put("profile", toProfileMap(profile));
         result.put("currentSite", currentSiteMap);
-        // 【修改】合并地盘变更和公司变更的 pending 状态
+        result.put("mySites", mySites);
         result.put("hasPendingApplication", hasPendingApplication || hasPendingCompanyChange);
         result.put("hasPendingCompanyChange", hasPendingCompanyChange);
         if (hasPendingCompanyChange) {
@@ -327,6 +335,32 @@ public class WorkerController {
         }
         result.put("pendingApplication", hasPendingApplication ? toAppMap(pendingApps.get(0)) : null);
         result.put("availableSites", availableSites);
+        return ApiResponse.success(result);
+    }
+
+    // ==================== 多地盘切换 ====================
+
+    /**
+     * GET /worker/my-sites
+     * 获取工人已加入的地盘列表（当前地盘由客户端本地管理）
+     */
+    @GetMapping("/my-sites")
+    public ApiResponse<List<Map<String, Object>>> getMySites(@AuthenticationPrincipal String userId) {
+        Long uid = Long.valueOf(userId);
+        WorkerProfile profile = workerService.getProfile(uid);
+        List<WorkerSite> workerSites = workerSiteRepository.findByWorkerId(profile.getId());
+        List<Map<String, Object>> result = workerSites.stream().map(ws -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("siteId", ws.getSiteId());
+            m.put("dailyWage", ws.getDailyWage());
+            m.put("contractAttachment", ws.getContractAttachment());
+            m.put("joinedAt", ws.getJoinedAt() != null ? ws.getJoinedAt().toString() : null);
+            siteRepository.findById(ws.getSiteId()).ifPresent(site -> {
+                m.put("name", site.getName());
+                m.put("address", site.getAddress());
+            });
+            return m;
+        }).collect(Collectors.toList());
         return ApiResponse.success(result);
     }
 
@@ -418,8 +452,6 @@ public class WorkerController {
         // 1. 必填字段验证
         if (!body.containsKey("siteId") || body.get("siteId") == null)
             return ApiResponse.error("请选择地盘");
-        if (!body.containsKey("companyId") || body.get("companyId") == null)
-            return ApiResponse.error("请选择所属判头公司");
         if (!body.containsKey("dailyWage") || body.get("dailyWage") == null)
             return ApiResponse.error("请填写每日薪酬");
         if (!body.containsKey("contractAttachment") || body.get("contractAttachment") == null
@@ -427,10 +459,17 @@ public class WorkerController {
             return ApiResponse.error("请上传雇佣合同附件");
 
         Long siteId = Long.valueOf(body.get("siteId").toString());
-        Long companyId = Long.valueOf(body.get("companyId").toString());
         String remark = (String) body.getOrDefault("remark", "");
 
         WorkerProfile profile = workerService.getProfile(uid);
+
+        // companyId 可选：优先取请求中的，其次取工人当前公司
+        Long companyId = body.get("companyId") != null
+                ? Long.valueOf(body.get("companyId").toString())
+                : profile.getCompanyId();
+        if (companyId == null) {
+            return ApiResponse.error("请选择所属判头公司");
+        }
 
         // 1.5 證書資料驗證（平安卡編號+附件、註冊證編號+附件，4 項必填）
         if (profile.getSafetyCard() == null || profile.getSafetyCard().trim().isEmpty()
@@ -452,13 +491,11 @@ public class WorkerController {
             return ApiResponse.error(crossMsg);
         }
 
-        if (profile.getCurrentSiteId() != null) {
-            return ApiResponse.error("您已有地盘，请先离开当前地盘");
-        }
-
-        boolean alreadyApplied = siteApplicationRepository.existsByWorkerIdAndSiteIdAndStatusIn(
-                uid, siteId, List.of(AuditStatus.PENDING, AuditStatus.APPROVED));
-        if (alreadyApplied) {
+        // 多地盘支持：检查是否已申请（PENDING）或已加入该地盘（worker_sites）
+        boolean alreadyApplied = siteApplicationRepository.existsByWorkerIdAndSiteIdAndStatus(
+                uid, siteId, AuditStatus.PENDING);
+        boolean alreadyInSite = workerSiteRepository.findByWorkerIdAndSiteId(profile.getId(), siteId).isPresent();
+        if (alreadyApplied || alreadyInSite) {
             return ApiResponse.error("您已申請或已加入工地，請勿重复申請");
         }
 
@@ -542,26 +579,41 @@ public class WorkerController {
 
     /**
      * GET /worker/site-safety-score
-     * 获取工人在当前地盘的安全分（按地盘维度，总分15分）
+     * 获取工人在指定地盘的安全分（按地盘维度，总分15分）
      */
     @GetMapping("/site-safety-score")
-    public ApiResponse<Map<String, Object>> getSiteSafetyScore(@AuthenticationPrincipal String userId) {
+    public ApiResponse<Map<String, Object>> getSiteSafetyScore(
+            @AuthenticationPrincipal String userId,
+            @RequestParam(required = false) Long siteId) {
         Long uid = Long.valueOf(userId);
         WorkerProfile profile = workerService.getProfile(uid);
 
         Map<String, Object> result = new HashMap<>();
 
-        // 如果没有当前地盘，返回默认15分
-        if (profile.getCurrentSiteId() == null) {
+        // 如果没有指定地盘，返回第一条 worker_sites 中的地盘（或默认15分）
+        if (siteId == null) {
+            List<WorkerSite> sites = workerSiteRepository.findByWorkerId(profile.getId());
+            if (sites.isEmpty()) {
+                result.put("safetyScore", 15);
+                result.put("totalScore", 15);
+                result.put("siteId", null);
+                result.put("message", "暂无当前地盘");
+                return ApiResponse.success(result);
+            }
+            siteId = sites.get(0).getSiteId();
+        }
+
+        // 验证工人是否在该地盘
+        java.util.Optional<WorkerSite> wsOpt = workerSiteRepository.findByWorkerIdAndSiteId(profile.getId(), siteId);
+        if (wsOpt.isEmpty()) {
             result.put("safetyScore", 15);
             result.put("totalScore", 15);
-            result.put("siteId", null);
-            result.put("message", "暂无当前地盘");
+            result.put("siteId", siteId);
+            result.put("message", "未加入该地盘");
             return ApiResponse.success(result);
         }
 
         // 获取地盘维度的安全分
-        Long siteId = profile.getCurrentSiteId();
         java.util.Optional<WorkerSiteSafetyScore> scoreOpt = workerSiteSafetyScoreRepository
                 .findByWorkerIdAndSiteId(profile.getId(), siteId);
 
@@ -569,7 +621,6 @@ public class WorkerController {
         if (scoreOpt.isPresent()) {
             safetyScore = scoreOpt.get().getSafetyScore();
         } else {
-            // 如果没有记录，初始化为15分
             WorkerSiteSafetyScore newScore = WorkerSiteSafetyScore.builder()
                     .workerId(profile.getId())
                     .siteId(siteId)
@@ -631,7 +682,7 @@ public class WorkerController {
         // 创建更换公司申请
         WorkerCompanyChangeRequest requestEntity = WorkerCompanyChangeRequest.builder()
                 .workerId(profile.getId())
-                .fromCompanyId(profile.getCurrentCompanyId())
+                .fromCompanyId(profile.getCompanyId())
                 .toCompanyId(toCompanyId)
                 .reason(body.containsKey("reason") && body.get("reason") != null
                         ? body.get("reason").toString()
@@ -650,7 +701,7 @@ public class WorkerController {
                 .build();
         requestEntity = workerCompanyChangeRequestRepository.save(requestEntity);
         log.info("工人提交更換公司申請(JSON): requestId={}, workerId={}, fromCompanyId={}, toCompanyId={}",
-                requestEntity.getId(), profile.getId(), profile.getCurrentCompanyId(), toCompanyId);
+                requestEntity.getId(), profile.getId(), profile.getCompanyId(), toCompanyId);
 
         // 发送通知给目标公司的所有判头
         sendCompanyChangeNotification(toCompany, profile, requestEntity);
@@ -725,7 +776,7 @@ public class WorkerController {
         // 创建更换公司申请
         WorkerCompanyChangeRequest requestEntity = WorkerCompanyChangeRequest.builder()
                 .workerId(profile.getId())
-                .fromCompanyId(profile.getCurrentCompanyId())
+                .fromCompanyId(profile.getCompanyId())
                 .toCompanyId(toCompanyId)
                 .reason(reason != null ? reason : "工人主动申请")
                 .contractAttachment(contractAttachment)
@@ -736,7 +787,7 @@ public class WorkerController {
                 .build();
         requestEntity = workerCompanyChangeRequestRepository.save(requestEntity);
         log.info("工人提交更換公司申請(multipart): requestId={}, workerId={}, fromCompanyId={}, toCompanyId={}",
-                requestEntity.getId(), profile.getId(), profile.getCurrentCompanyId(), toCompanyId);
+                requestEntity.getId(), profile.getId(), profile.getCompanyId(), toCompanyId);
 
         // 发送通知给目标公司的所有判头
         sendCompanyChangeNotification(toCompany, profile, requestEntity);

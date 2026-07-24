@@ -274,6 +274,22 @@ class ApiService {
     return data;
   }
 
+  /// 工人獲取已加入的地盤列表
+  Future<List<Map<String, dynamic>>> getWorkerMySites() async {
+    if (ApiConfig.mockMode) return [];
+    final resp = await _client.get(
+      Uri.parse('$baseUrl/worker/my-sites'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    return (jsonDecode(resp.body)['data'] as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 工人切換當前地盤（客户端本地管理，无需后端接口）
+  Future<void> workerSwitchSite(int siteId) async {
+    // 当前地盘由客户端本地状态管理，切换时仅需刷新首页数据即可
+  }
+
   /// 工人資料
   Future<Map<String, dynamic>> getWorkerProfile() async {
     final resp = await _client.get(
@@ -962,15 +978,28 @@ class ApiService {
   }
 
   /// 扣分
-  Future<Map<String, dynamic>> deductWorkerScore(int workerId, int points, String reason) async {
+  Future<Map<String, dynamic>> deductWorkerScore(int workerId, int points, String reason, {int? siteId}) async {
     if (ApiConfig.mockMode) return {};
+    final body = <String, dynamic>{'points': points, 'reason': reason};
+    if (siteId != null) body['siteId'] = siteId;
     final resp = await _client.post(
       Uri.parse('$baseUrl/internal/workers/$workerId/deduct'),
       headers: ApiConfig.headers(token: token),
-      body: jsonEncode({'points': points, 'reason': reason}),
+      body: jsonEncode(body),
     );
     _handleError(resp);
     return jsonDecode(resp.body)['data'] as Map<String, dynamic>;
+  }
+
+  /// 獲取扣分項目清單（按分類分組）
+  Future<List<Map<String, dynamic>>> getDeductionItems() async {
+    if (ApiConfig.mockMode) return [];
+    final resp = await _client.get(
+      Uri.parse('$baseUrl/internal/deduction-items'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    return (jsonDecode(resp.body)['data'] as List).cast<Map<String, dynamic>>();
   }
 
   /// 鎖卡/解鎖

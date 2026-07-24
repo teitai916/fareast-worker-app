@@ -12,6 +12,7 @@ import com.fareast.worker.model.entity.User;
 import com.fareast.worker.model.entity.WorkerProfile;
 import com.fareast.worker.model.entity.WorkerSiteSafetyScore;
 import com.fareast.worker.model.entity.WorkerCompanyChangeRequest;
+import com.fareast.worker.model.entity.WorkerSite;
 import com.fareast.worker.model.enums.AuditStatus;
 import com.fareast.worker.repository.AttendanceRepository;
 import com.fareast.worker.repository.CompanyRepository;
@@ -21,6 +22,7 @@ import com.fareast.worker.repository.SiteRepository;
 import com.fareast.worker.repository.UserRepository;
 import com.fareast.worker.repository.WorkerProfileRepository;
 import com.fareast.worker.repository.WorkerCompanyChangeRequestRepository;
+import com.fareast.worker.repository.WorkerSiteRepository;
 import com.fareast.worker.repository.WorkerSiteSafetyScoreRepository;
 import com.fareast.worker.service.NotificationService;
 import com.fareast.worker.service.SafetyService;
@@ -72,6 +74,9 @@ public class ContractorController {
 
     @Autowired
     private WorkerSiteSafetyScoreRepository workerSiteSafetyScoreRepository;
+
+    @Autowired
+    private WorkerSiteRepository workerSiteRepository;
 
     @Autowired
     private AttendanceRepository attendanceRepository;
@@ -185,11 +190,11 @@ public class ContractorController {
 
         if (approved) {
             app.setStatus(AuditStatus.APPROVED);
-            // Update worker profile
             WorkerProfile profile = workerProfileRepository.findByUserId(app.getWorkerId())
                     .orElseThrow(() -> new BusinessException(404, "工人資料不存在"));
-            profile.setCurrentSiteId(app.getSiteId());
-            profile.setCurrentCompanyId(app.getCompanyId());
+
+            // 更新 profile 基礎信息（公司）
+            profile.setCompanyId(app.getCompanyId());
             if (app.getDailyWage() != null) {
                 profile.setDailyWage(app.getDailyWage());
             }
@@ -197,13 +202,35 @@ public class ContractorController {
                 profile.setContractAttachment(app.getContractAttachment());
             }
             workerProfileRepository.save(profile);
+
+            // 写入 worker_sites（多地盘支持）
+            java.util.Optional<WorkerSite> existingWs = workerSiteRepository
+                    .findByWorkerIdAndSiteId(profile.getId(), app.getSiteId());
+            if (existingWs.isPresent()) {
+                // 已存在记录：更新日薪和合约
+                WorkerSite ws = existingWs.get();
+                if (app.getDailyWage() != null) ws.setDailyWage(app.getDailyWage());
+                if (app.getContractAttachment() != null) ws.setContractAttachment(app.getContractAttachment());
+                workerSiteRepository.save(ws);
+            } else {
+                // 新增记录
+                WorkerSite newWs = WorkerSite.builder()
+                        .workerId(profile.getId())
+                        .siteId(app.getSiteId())
+                        .dailyWage(app.getDailyWage())
+                        .contractAttachment(app.getContractAttachment())
+                        .joinedAt(LocalDateTime.now())
+                        .build();
+                workerSiteRepository.save(newWs);
+            }
+
             log.info("申請已批准，工人已加入地盤: applicationId={}, workerId={}, siteId={}",
                     app.getId(), app.getWorkerId(), app.getSiteId());
             
             // 初始化工人在地盤的安全分（总分15分）
             _initWorkerSiteSafetyScore(profile.getId(), app.getSiteId());
             
-            // 重置工人的必修安全影片完成狀態，需重新觀看
+            // 重置工人的必修安全影片完成狀態，需重新觀看（僅首次加入該地盤時）
             safetyService.resetMandatoryVideos(app.getWorkerId());
         } else {
             app.setStatus(AuditStatus.REJECTED);
@@ -287,13 +314,12 @@ public class ContractorController {
         if (companyId == null) {
             return ApiResponse.success(List.of());
         }
-        List<WorkerProfile> profiles = workerProfileRepository.findByCurrentCompanyId(companyId);
+        List<WorkerProfile> profiles = workerProfileRepository.findByCompanyId(companyId);
         List<Map<String, Object>> data = profiles.stream().map(p -> {
             Map<String, Object> m = new HashMap<>();
             m.put("profileId", p.getId());
             m.put("userId", p.getUserId());
             m.put("workerNumber", p.getWorkerNumber());
-            m.put("currentSiteId", p.getCurrentSiteId());
             m.put("dailyWage", p.getDailyWage());
             // User info
             userRepository.findById(p.getUserId()).ifPresent(u -> {
@@ -301,9 +327,12 @@ public class ContractorController {
                 m.put("name", u.getName());
                 m.put("englishName", u.getEnglishName());
             });
-            // Site info
-            if (p.getCurrentSiteId() != null) {
-                siteRepository.findById(p.getCurrentSiteId()).ifPresent(s -> {
+            // Site info from worker_sites
+            List<WorkerSite> wsList = workerSiteRepository.findByWorkerId(p.getId());
+            if (!wsList.isEmpty()) {
+                Long firstSiteId = wsList.get(0).getSiteId();
+                m.put("siteId", firstSiteId);
+                siteRepository.findById(firstSiteId).ifPresent(s -> {
                     m.put("siteName", s.getName());
                 });
             }
@@ -394,7 +423,7 @@ public class ContractorController {
 
     /**
      * GET /contractor/sites
-     * 通过公司工人所在的 current_site_id 获取地盘列表
+     * 通过公司工人所在的地盘获取地盘列表
      */
     @GetMapping("/sites")
     public ApiResponse<List<Map<String, Object>>> getMySites(
@@ -407,12 +436,15 @@ public class ContractorController {
             return ApiResponse.success(List.of());
         }
 
-        // 查询本公司下所有工人，收集他们所在的地盘ID（去重）
-        List<WorkerProfile> profiles = workerProfileRepository.findByCurrentCompanyId(companyId);
-        Set<Long> siteIds = profiles.stream()
-                .map(WorkerProfile::getCurrentSiteId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+        // 查询本公司下所有工人，收集他们在 worker_sites 中的地盘ID（去重）
+        List<WorkerProfile> profiles = workerProfileRepository.findByCompanyId(companyId);
+        Set<Long> siteIds = new HashSet<>();
+        for (WorkerProfile p : profiles) {
+            List<WorkerSite> wsList = workerSiteRepository.findByWorkerId(p.getId());
+            for (WorkerSite ws : wsList) {
+                siteIds.add(ws.getSiteId());
+            }
+        }
 
         // 同时补充该公司名下的所有地盘（工人在的 + 公司拥有的）
         siteRepository.findByCompanyId(companyId).forEach(s -> siteIds.add(s.getId()));
@@ -450,12 +482,16 @@ public class ContractorController {
         // 查询该判头公司下的工人
         List<WorkerProfile> profiles;
         if (siteId != null) {
-            // 按地盘查，但只取属于该公司的工人
-            profiles = workerProfileRepository.findByCurrentSiteId(siteId).stream()
-                    .filter(p -> companyId.equals(p.getCurrentCompanyId()))
+            // 按地盘查：从 worker_sites 找出该地盘下属于该公司的工人
+            List<WorkerSite> siteWorkers = workerSiteRepository.findBySiteId(siteId);
+            Set<Long> workerProfileIds = siteWorkers.stream()
+                    .map(WorkerSite::getWorkerId)
+                    .collect(Collectors.toSet());
+            profiles = workerProfileRepository.findAllById(workerProfileIds).stream()
+                    .filter(p -> companyId.equals(p.getCompanyId()))
                     .collect(Collectors.toList());
         } else {
-            profiles = workerProfileRepository.findByCurrentCompanyId(companyId);
+            profiles = workerProfileRepository.findByCompanyId(companyId);
         }
 
         LocalDate today = LocalDate.now();
@@ -463,23 +499,27 @@ public class ContractorController {
         int checkedIn = 0;
         int absent = 0;
 
+        final Long querySiteId = siteId; // 用于 lambda
+
         List<Map<String, Object>> workers = profiles.stream().map(p -> {
             Map<String, Object> m = new HashMap<>();
             m.put("profileId", p.getId());
             m.put("userId", p.getUserId());
             m.put("workerNumber", p.getWorkerNumber());
-            m.put("currentSiteId", p.getCurrentSiteId());
             m.put("dailyWage", p.getDailyWage());
+            // 从 worker_sites 获取该工人在此地盘的信息
+            Long displaySiteId = querySiteId;
+            if (displaySiteId == null) {
+                List<WorkerSite> wsList = workerSiteRepository.findByWorkerId(p.getId());
+                displaySiteId = wsList.isEmpty() ? null : wsList.get(0).getSiteId();
+            }
+            m.put("siteId", displaySiteId);
             // 从 worker_site_safety_scores 表获取地盤维度的安全分（15分制）
             Integer siteScore = null;
-            if (p.getCurrentSiteId() != null) {
+            if (displaySiteId != null) {
                 Optional<WorkerSiteSafetyScore> scoreOpt = workerSiteSafetyScoreRepository
-                        .findByWorkerIdAndSiteId(p.getId(), p.getCurrentSiteId());
-                if (scoreOpt.isPresent()) {
-                    siteScore = scoreOpt.get().getSafetyScore();
-                } else {
-                    siteScore = 15; // 默认15分
-                }
+                        .findByWorkerIdAndSiteId(p.getId(), displaySiteId);
+                siteScore = scoreOpt.map(WorkerSiteSafetyScore::getSafetyScore).orElse(15);
             }
             m.put("safetyScore", siteScore);
             m.put("cardLocked", p.getCardLocked() != null && p.getCardLocked());
@@ -493,8 +533,8 @@ public class ContractorController {
             });
 
             // Site info
-            if (p.getCurrentSiteId() != null) {
-                siteRepository.findById(p.getCurrentSiteId()).ifPresent(s -> {
+            if (displaySiteId != null) {
+                siteRepository.findById(displaySiteId).ifPresent(s -> {
                     m.put("siteName", s.getName());
                 });
             }
@@ -640,8 +680,8 @@ public class ContractorController {
             // 更新工人的當前公司
             WorkerProfile profile = workerProfileRepository.findById(req.getWorkerId())
                     .orElseThrow(() -> new BusinessException(404, "工人資料不存在"));
-            Long fromCompanyId = profile.getCurrentCompanyId();
-            profile.setCurrentCompanyId(req.getToCompanyId());
+            Long fromCompanyId = profile.getCompanyId();
+            profile.setCompanyId(req.getToCompanyId());
             // 同步日薪
             if (req.getDailySalary() != null) {
                 profile.setDailyWage(req.getDailySalary());

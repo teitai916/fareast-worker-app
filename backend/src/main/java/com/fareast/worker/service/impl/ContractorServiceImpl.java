@@ -37,6 +37,9 @@ public class ContractorServiceImpl implements ContractorService {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private WorkerSiteRepository workerSiteRepository;
+
     @Override
     public List<Site> getSites(Long companyId) {
         if (companyId == null) {
@@ -49,7 +52,10 @@ public class ContractorServiceImpl implements ContractorService {
     public List<WorkerProfile> getSiteWorkers(Long siteId) {
         siteRepository.findById(siteId)
                 .orElseThrow(() -> new BusinessException(404, "地盤不存在"));
-        return workerProfileRepository.findByCurrentSiteId(siteId);
+        List<WorkerSite> wsList = workerSiteRepository.findBySiteId(siteId);
+        List<Long> workerIds = wsList.stream().map(WorkerSite::getWorkerId).collect(Collectors.toList());
+        if (workerIds.isEmpty()) return Collections.emptyList();
+        return workerProfileRepository.findAllById(workerIds);
     }
 
     @Override
@@ -110,8 +116,17 @@ public class ContractorServiceImpl implements ContractorService {
                 request.setStatus(AuditStatus.APPROVED);
                 WorkerProfile profile = workerProfileRepository.findById(request.getWorkerId())
                         .orElseThrow(() -> new BusinessException(404, "工人資料不存在"));
-                profile.setCurrentSiteId(request.getToSiteId());
-                workerProfileRepository.save(profile);
+                // 写入 worker_sites
+                java.util.Optional<WorkerSite> existingWs = workerSiteRepository
+                        .findByWorkerIdAndSiteId(profile.getId(), request.getToSiteId());
+                if (existingWs.isEmpty()) {
+                    WorkerSite newWs = WorkerSite.builder()
+                            .workerId(profile.getId())
+                            .siteId(request.getToSiteId())
+                            .joinedAt(LocalDateTime.now())
+                            .build();
+                    workerSiteRepository.save(newWs);
+                }
                 log.info("轉地盤申請已批准: requestId={}, workerId={}, targetSiteId={}",
                         requestId, request.getWorkerId(), request.getToSiteId());
             } else {
@@ -130,7 +145,7 @@ public class ContractorServiceImpl implements ContractorService {
                 request.setStatus(AuditStatus.APPROVED);
                 WorkerProfile profile = workerProfileRepository.findById(request.getWorkerId())
                         .orElseThrow(() -> new BusinessException(404, "工人資料不存在"));
-                profile.setCurrentCompanyId(request.getToCompanyId());
+                profile.setCompanyId(request.getToCompanyId());
                 workerProfileRepository.save(profile);
             } else {
                 request.setStatus(AuditStatus.REJECTED);

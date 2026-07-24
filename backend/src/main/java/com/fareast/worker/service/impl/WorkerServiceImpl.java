@@ -92,7 +92,6 @@ public class WorkerServiceImpl implements WorkerService {
                     .safetyCard(request.getSafetyCard())
                     .workerRegistrationNum(request.getWorkerRegistrationNum())
                     .dailyWage(request.getDailyWage())
-                    .currentSiteId(request.getSiteId())
                     .blacklisted(false)
                     .cardLocked(false)
                     .faceRegistered(false)
@@ -104,7 +103,6 @@ public class WorkerServiceImpl implements WorkerService {
             if (request.getWorkerRegistrationNum() != null)
                 profile.setWorkerRegistrationNum(request.getWorkerRegistrationNum());
             if (request.getDailyWage() != null) profile.setDailyWage(request.getDailyWage());
-            if (request.getSiteId() != null) profile.setCurrentSiteId(request.getSiteId());
         }
 
         profile = workerProfileRepository.save(profile);

@@ -26,6 +26,9 @@ public class AdminServiceImpl implements AdminService {
     private WorkerProfileRepository workerProfileRepository;
 
     @Autowired
+    private WorkerSiteRepository workerSiteRepository;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Autowired
@@ -46,7 +49,13 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     public List<WorkerProfile> getWorkersBySite(Long siteId) {
-        return workerProfileRepository.findByCurrentSiteId(siteId);
+        // 通过 worker_sites 查找该地盘下的工人
+        List<com.fareast.worker.model.entity.WorkerSite> wsList = workerSiteRepository.findBySiteId(siteId);
+        List<Long> workerIds = wsList.stream()
+                .map(com.fareast.worker.model.entity.WorkerSite::getWorkerId)
+                .collect(java.util.stream.Collectors.toList());
+        if (workerIds.isEmpty()) return java.util.Collections.emptyList();
+        return workerProfileRepository.findAllById(workerIds);
     }
 
     @Override

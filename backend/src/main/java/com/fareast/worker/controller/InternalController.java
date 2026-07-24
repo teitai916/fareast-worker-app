@@ -62,6 +62,12 @@ public class InternalController {
     private WorkerSiteSafetyScoreRepository workerSiteSafetyScoreRepository;
 
     @Autowired
+    private WorkerSiteRepository workerSiteRepository;
+
+    @Autowired
+    private DeductionItemRepository deductionItemRepository;
+
+    @Autowired
     private WeatherWarningService weatherWarningService;
 
     // ==================== Home ====================
@@ -412,6 +418,36 @@ public class InternalController {
         return ApiResponse.success(result);
     }
 
+    // ==================== 扣分项目查询 ====================
+
+    /**
+     * GET /internal/deduction-items
+     * 返回按分类分组的扣分项目列表，供前端选择
+     */
+    @GetMapping("/deduction-items")
+    public ApiResponse<List<Map<String, Object>>> getDeductionItems() {
+        List<DeductionItem> items = deductionItemRepository.findAllByOrderByCategoryNameAscSortOrderAsc();
+        // 按 categoryName 分组
+        Map<String, List<DeductionItem>> grouped = items.stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        DeductionItem::getCategoryName,
+                        java.util.LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()));
+        List<Map<String, Object>> result = grouped.entrySet().stream().map(entry -> {
+            Map<String, Object> cat = new java.util.HashMap<>();
+            cat.put("categoryName", entry.getKey());
+            cat.put("items", entry.getValue().stream().map(item -> {
+                Map<String, Object> m = new java.util.HashMap<>();
+                m.put("id", item.getId());
+                m.put("itemName", item.getItemName());
+                m.put("points", item.getPoints());
+                return m;
+            }).collect(java.util.stream.Collectors.toList()));
+            return cat;
+        }).collect(java.util.stream.Collectors.toList());
+        return ApiResponse.success(result);
+    }
+
     // ==================== Worker Lookup by Number ====================
 
     @GetMapping("/workers/by-number/{workerNumber}")
@@ -420,8 +456,10 @@ public class InternalController {
                 .orElseThrow(() -> new BusinessException(404, "未找到該工人編號: " + workerNumber));
         Map<String, Object> result = toWorkerMap(profile);
 
-        // 查詢地盤維度安全分（15分制，來自 worker_site_safety_scores）
-        Long siteId = profile.getCurrentSiteId();
+        // 查询地盘维度安全分（15分制，来自 worker_site_safety_scores）
+        // 取 worker_sites 中第一个地盘计算
+        List<com.fareast.worker.model.entity.WorkerSite> wsList = workerSiteRepository.findByWorkerId(profile.getId());
+        Long siteId = wsList.isEmpty() ? null : wsList.get(0).getSiteId();
         if (siteId != null) {
             java.util.Optional<WorkerSiteSafetyScore> siteScoreOpt =
                     workerSiteSafetyScoreRepository.findByWorkerIdAndSiteId(profile.getId(), siteId);
@@ -447,6 +485,8 @@ public class InternalController {
             @RequestBody Map<String, Object> body) {
         Integer points = Integer.valueOf(body.get("points").toString());
         String reason = (String) body.getOrDefault("reason", "");
+        // siteId 必填（已无 current_site_id）
+        Long siteId = body.get("siteId") != null ? Long.valueOf(body.get("siteId").toString()) : null;
         
         // 记录扣分日志（仅记录，不再扣 personal 100分制）
         adminService.deductScore(id, points, reason, Long.valueOf(userId));
@@ -454,9 +494,9 @@ public class InternalController {
         WorkerProfile profile = workerProfileRepository.findById(id).orElse(null);
 
         // 同時扣除地盤維度安全分（worker_site_safety_scores, 15分制）
-        if (profile != null && profile.getCurrentSiteId() != null) {
+        if (profile != null && siteId != null) {
             java.util.Optional<WorkerSiteSafetyScore> siteScoreOpt =
-                    workerSiteSafetyScoreRepository.findByWorkerIdAndSiteId(id, profile.getCurrentSiteId());
+                    workerSiteSafetyScoreRepository.findByWorkerIdAndSiteId(id, siteId);
             WorkerSiteSafetyScore siteScore;
             if (siteScoreOpt.isPresent()) {
                 siteScore = siteScoreOpt.get();
@@ -465,20 +505,20 @@ public class InternalController {
             } else {
                 siteScore = WorkerSiteSafetyScore.builder()
                         .workerId(id)
-                        .siteId(profile.getCurrentSiteId())
+                        .siteId(siteId)
                         .safetyScore(Math.max(0, 15 - points))
                         .build();
             }
             workerSiteSafetyScoreRepository.save(siteScore);
             log.info("地盤安全分已扣减: workerId={}, siteId={}, deducted={}, newScore={}",
-                    id, profile.getCurrentSiteId(), points, siteScore.getSafetyScore());
+                    id, siteId, points, siteScore.getSafetyScore());
         }
 
         // 檢查是否需要自動鎖卡和加入黑名單（只檢查地盤安全分為 0）
         boolean scoreIsZero = false;
-        if (profile != null && profile.getCurrentSiteId() != null) {
+        if (profile != null && siteId != null) {
             java.util.Optional<WorkerSiteSafetyScore> siteScoreOpt2 =
-                    workerSiteSafetyScoreRepository.findByWorkerIdAndSiteId(id, profile.getCurrentSiteId());
+                    workerSiteSafetyScoreRepository.findByWorkerIdAndSiteId(id, siteId);
             if (siteScoreOpt2.isPresent() && siteScoreOpt2.get().getSafetyScore() != null
                     && siteScoreOpt2.get().getSafetyScore() == 0) {
                 scoreIsZero = true;
@@ -504,7 +544,7 @@ public class InternalController {
                     .workerId(profile.getId())
                     .name(profile.getChineseName())
                     .workerRegistrationNum(profile.getWorkerRegistrationNum())
-                    .companyId(profile.getCurrentCompanyId())
+                    .companyId(profile.getCompanyId())
                     .status(true)
                     .reason(reason)
                     .build();
@@ -515,9 +555,9 @@ public class InternalController {
 
         Map<String, Object> result = new HashMap<>();
         // 返回地盤安全分（15分制）
-        if (profile != null && profile.getCurrentSiteId() != null) {
+        if (profile != null && siteId != null) {
             java.util.Optional<WorkerSiteSafetyScore> siteScoreOpt3 =
-                    workerSiteSafetyScoreRepository.findByWorkerIdAndSiteId(id, profile.getCurrentSiteId());
+                    workerSiteSafetyScoreRepository.findByWorkerIdAndSiteId(id, siteId);
             result.put("safetyScore", siteScoreOpt3.map(WorkerSiteSafetyScore::getSafetyScore).orElse(15));
         } else {
             result.put("safetyScore", 15);
@@ -607,8 +647,8 @@ public class InternalController {
             // 无记录 → 新增
             // 取公司名称
             String companyName = null;
-            if (profile.getCurrentCompanyId() != null) {
-                Optional<Company> companyOpt = companyRepository.findById(profile.getCurrentCompanyId());
+            if (profile.getCompanyId() != null) {
+                Optional<Company> companyOpt = companyRepository.findById(profile.getCompanyId());
                 if (companyOpt.isPresent()) {
                     companyName = companyOpt.get().getName();
                 }
@@ -622,7 +662,7 @@ public class InternalController {
                     .name(workerName)
                     .workerRegistrationNum(profile.getWorkerRegistrationNum())
                     .age(null)  // 年龄未收集
-                    .companyId(profile.getCurrentCompanyId())
+                    .companyId(profile.getCompanyId())
                     .status(true)
                     .build();
             blacklistRecordRepository.save(newRecord);
@@ -685,15 +725,19 @@ public class InternalController {
         m.put("safetyScore", 0); // 已廢棄，安全分在地盤維度管理
         m.put("cardLocked", w.getCardLocked());
         m.put("blacklisted", w.getBlacklisted());
-        m.put("currentSiteId", w.getCurrentSiteId());
-        m.put("currentCompanyId", w.getCurrentCompanyId());
+        m.put("companyId", w.getCompanyId());
 
-        if (w.getCurrentSiteId() != null) {
-            siteRepository.findById(w.getCurrentSiteId()).ifPresent(site ->
+        // 从 worker_sites 查工人加入的地盘列表
+        List<com.fareast.worker.model.entity.WorkerSite> wsList = workerSiteRepository.findByWorkerId(w.getId());
+        if (!wsList.isEmpty()) {
+            // 取第一个作为显示地盘
+            Long displaySiteId = wsList.get(0).getSiteId();
+            m.put("siteId", displaySiteId);
+            siteRepository.findById(displaySiteId).ifPresent(site ->
                     m.put("siteName", site.getName()));
         }
-        if (w.getCurrentCompanyId() != null) {
-            companyRepository.findById(w.getCurrentCompanyId()).ifPresent(company ->
+        if (w.getCompanyId() != null) {
+            companyRepository.findById(w.getCompanyId()).ifPresent(company ->
                     m.put("companyName", company.getName()));
         }
         return m;

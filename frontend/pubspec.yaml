@@ -62,6 +62,10 @@ dependencies:
   # App shortcuts (long-press icon quick actions)
   quick_actions: ^1.1.0
 
+  # Local notifications for check-in reminders
+  flutter_local_notifications: ^18.0.0
+  timezone: ^0.10.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

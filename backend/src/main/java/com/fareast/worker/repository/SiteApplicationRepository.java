@@ -21,6 +21,8 @@ public interface SiteApplicationRepository extends JpaRepository<SiteApplication
 
     boolean existsByWorkerIdAndSiteIdAndStatusIn(Long workerId, Long siteId, List<AuditStatus> statuses);
 
+    boolean existsByWorkerIdAndSiteIdAndStatus(Long workerId, Long siteId, AuditStatus status);
+
     List<SiteApplication> findByCompanyIdOrderByCreatedAtDesc(Long companyId);
 
     long countByCompanyIdAndStatus(Long companyId, AuditStatus status);

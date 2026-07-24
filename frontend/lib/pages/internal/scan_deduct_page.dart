@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
 
 /// 掃碼扣分頁面
 /// 流程：掃描 QR → 解析工人編號 → 查 API → 顯示扣分界面
+/// 扣分方式：選擇分類 → 選擇扣分項目（固定分值）→ 填寫備註 → 確認
 class ScanDeductPage extends StatefulWidget {
   const ScanDeductPage({super.key});
 
@@ -22,10 +22,14 @@ class _ScanDeductPageState extends State<ScanDeductPage> {
   // 工人資訊
   Map<String, dynamic>? _worker;
 
-  // 扣分輸入
-  final _deductController = TextEditingController();
-  final _reasonController = TextEditingController();
-  int _deductPoints = 1;
+  // 扣分項目數據
+  List<Map<String, dynamic>> _categories = [];
+  String? _selectedCategory;
+  List<Map<String, dynamic>> _currentItems = [];
+  Map<String, dynamic>? _selectedItem;
+
+  // 備註
+  final _remarkController = TextEditingController();
 
   @override
   void initState() {
@@ -36,8 +40,7 @@ class _ScanDeductPageState extends State<ScanDeductPage> {
   @override
   void dispose() {
     _cameraController?.dispose();
-    _deductController.dispose();
-    _reasonController.dispose();
+    _remarkController.dispose();
     super.dispose();
   }
 
@@ -61,14 +64,21 @@ class _ScanDeductPageState extends State<ScanDeductPage> {
 
   Future<void> _lookupWorker(String workerNumber) async {
     try {
-      final worker = await ApiService().getWorkerByNumber(workerNumber);
+      final results = await Future.wait([
+        ApiService().getWorkerByNumber(workerNumber),
+        ApiService().getDeductionItems(),
+      ]);
       if (!mounted) return;
+      final worker = results[0] as Map<String, dynamic>;
+      final categories = results[1] as List<Map<String, dynamic>>;
       setState(() {
         _worker = worker;
+        _categories = categories;
+        _selectedCategory = null;
+        _currentItems = [];
+        _selectedItem = null;
+        _remarkController.clear();
         _loading = false;
-        _deductPoints = 1;
-        _deductController.text = '1';
-        _reasonController.clear();
       });
       _cameraController?.stop();
     } catch (e) {
@@ -76,7 +86,7 @@ class _ScanDeductPageState extends State<ScanDeductPage> {
       setState(() {
         _error = e.toString().replaceAll('Exception: ', '');
         _loading = false;
-        _scanned = false; // 允許重新掃描
+        _scanned = false;
       });
     }
   }
@@ -86,46 +96,45 @@ class _ScanDeductPageState extends State<ScanDeductPage> {
       _scanned = false;
       _error = null;
       _worker = null;
+      _categories = [];
+      _selectedCategory = null;
+      _currentItems = [];
+      _selectedItem = null;
     });
     _cameraController?.start();
   }
 
-  void _setDeductPoints(int points) {
-    final maxDeduct = (_worker!['siteSafetyScore'] as int?) ?? 15;
+  void _onCategorySelected(String? categoryName) {
+    if (categoryName == null) return;
+    final cat = _categories.firstWhere((c) => c['categoryName'] == categoryName);
     setState(() {
-      _deductPoints = points.clamp(1, maxDeduct);
-      _deductController.text = _deductPoints.toString();
+      _selectedCategory = categoryName;
+      _currentItems = (cat['items'] as List).cast<Map<String, dynamic>>();
+      _selectedItem = null;
     });
   }
 
-  void _onDeductInputChanged(String value) {
-    final parsed = int.tryParse(value);
-    final maxDeduct = (_worker!['siteSafetyScore'] as int?) ?? 15;
-    if (parsed != null) {
-      _deductPoints = parsed.clamp(1, maxDeduct);
-      _deductController.text = _deductPoints.toString();
-      _deductController.selection = TextSelection.fromPosition(
-        TextPosition(offset: _deductController.text.length),
-      );
-    } else if (value.isEmpty) {
-      _deductPoints = 0;
-    }
+  void _onItemSelected(Map<String, dynamic> item) {
+    setState(() => _selectedItem = item);
   }
 
   Future<void> _submitDeduct() async {
-    if (_worker == null || _deductPoints <= 0) return;
+    if (_worker == null || _selectedItem == null) return;
 
+    final points = _selectedItem!['points'] as int;
     final currentScore = (_worker!['siteSafetyScore'] as int?) ?? 15;
-    final newScore = currentScore - _deductPoints;
-    final reason = _reasonController.text.trim().isEmpty ? '安全違規扣分' : _reasonController.text.trim();
+    final newScore = currentScore - points;
 
-    // 確認對話框
+    final itemName = _selectedItem!['itemName'] as String;
+    final remark = _remarkController.text.trim();
+    final reason = '$_selectedCategory - $itemName${remark.isNotEmpty ? '（備註：$remark）' : ''}';
+
     if (newScore <= 0) {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('⚠️ 扣分後安全分為 0'),
-          content: Text('扣分後安全分將降至 $newScore 分，系統將自動鎖卡及加入黑名單。\n\n扣分：$_deductPoints 分\n原因：$reason\n\n確認繼續？'),
+          content: Text('扣分後安全分將降至 $newScore 分，系統將自動鎖卡及加入黑名單。\n\n分類：$_selectedCategory\n項目：$itemName\n扣分：$points 分\n\n確認繼續？'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
             ElevatedButton(
@@ -140,14 +149,11 @@ class _ScanDeductPageState extends State<ScanDeductPage> {
     }
 
     setState(() => _loading = true);
-
     try {
       final result = await ApiService().deductWorkerScore(
-        _worker!['id'] as int,
-        _deductPoints,
-        reason,
+        _worker!['id'] as int, points, reason,
+        siteId: _worker!['siteId'] as int?,
       );
-
       if (!mounted) return;
       setState(() => _loading = false);
 
@@ -170,7 +176,9 @@ class _ScanDeductPageState extends State<ScanDeductPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('工人：${_worker!['chineseName'] ?? '-'}'),
-              Text('扣分：$_deductPoints 分'),
+              Text('扣分：$points 分'),
+              Text('分類：$_selectedCategory'),
+              Text('項目：$itemName'),
               Text('剩餘安全分：$remainingScore 分'),
               if (autoLocked) const SizedBox(height: 8),
               if (autoLocked) const Text('🔒 已自動鎖卡', style: TextStyle(color: AppTheme.warningColor)),
@@ -179,10 +187,7 @@ class _ScanDeductPageState extends State<ScanDeductPage> {
           ),
           actions: [
             ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx); // 關閉結果
-                _rescan();          // 返回掃描
-              },
+              onPressed: () { Navigator.pop(ctx); _rescan(); },
               child: const Text('繼續掃描'),
             ),
           ],
@@ -192,10 +197,7 @@ class _ScanDeductPageState extends State<ScanDeductPage> {
       if (!mounted) return;
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('扣分失敗：${e.toString().replaceAll("Exception: ", "")}'),
-          backgroundColor: AppTheme.errorColor,
-        ),
+        SnackBar(content: Text('扣分失敗：${e.toString().replaceAll("Exception: ", "")}'), backgroundColor: AppTheme.errorColor),
       );
     }
   }
@@ -280,9 +282,9 @@ class _ScanDeductPageState extends State<ScanDeductPage> {
   Widget _buildDeductUI() {
     final siteSafetyScore = (_worker!['siteSafetyScore'] as int?) ?? 15;
     final siteSafetyTotal = (_worker!['siteSafetyTotal'] as int?) ?? 15;
-    final newScore = (siteSafetyScore - _deductPoints).clamp(0, siteSafetyTotal);
-    final isZero = newScore <= 0;
-    final maxDeduct = siteSafetyScore;
+    final deductPoints = _selectedItem != null ? (_selectedItem!['points'] as int) : 0;
+    final newScore = (siteSafetyScore - deductPoints).clamp(0, siteSafetyTotal);
+    final isZero = _selectedItem != null && newScore <= 0;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -320,7 +322,7 @@ class _ScanDeductPageState extends State<ScanDeductPage> {
           ),
           const SizedBox(height: 16),
 
-          // 扣分輸入卡
+          // 扣分項目選擇卡
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -330,116 +332,137 @@ class _ScanDeductPageState extends State<ScanDeductPage> {
                   const Text('安全扣分', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const Divider(),
 
-                  // 數字輸入 + 細小上下箭頭
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const Text('扣分數量：', style: TextStyle(fontSize: 15)),
-                      const Spacer(),
-                      // 輸入框 + 上下箭頭
-                      SizedBox(
-                        width: 100,
-                        child: TextFormField(
-                          controller: _deductController,
-                          keyboardType: TextInputType.number,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(2),
-                          ],
-                          decoration: InputDecoration(
-                            border: const OutlineInputBorder(),
-                            contentPadding: const EdgeInsets.only(left: 8, right: 4, top: 8, bottom: 8),
-                            suffixIcon: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                  // 分類下拉
+                  const Text('扣分類別', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _selectedCategory,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      hintText: '請選擇扣分類別',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                    items: _categories.map((cat) => DropdownMenuItem(
+                      value: cat['categoryName'] as String,
+                      child: Text(cat['categoryName'] as String),
+                    )).toList(),
+                    onChanged: _onCategorySelected,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 項目列表
+                  if (_currentItems.isNotEmpty) ...[
+                    const Text('扣分項目', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 8),
+                    ..._currentItems.map((item) {
+                      final itemName = item['itemName'] as String;
+                      final points = item['points'] as int;
+                      final isSelected = _selectedItem?['id'] == item['id'];
+                      return Card(
+                        color: isSelected ? AppTheme.primaryColor.withOpacity(0.1) : null,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(
+                            color: isSelected ? AppTheme.primaryColor : Colors.grey.shade300,
+                            width: isSelected ? 2 : 1,
+                          ),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () => _onItemSelected(item),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            child: Row(
                               children: [
-                                GestureDetector(
-                                  onTap: _deductPoints < maxDeduct
-                                      ? () => _setDeductPoints(_deductPoints + 1)
-                                      : null,
-                                  child: Icon(
-                                    Icons.keyboard_arrow_up,
-                                    size: 16,
-                                    color: _deductPoints < maxDeduct
-                                        ? AppTheme.primaryColor
-                                        : AppTheme.textHint,
+                                Expanded(
+                                  child: Text(
+                                    itemName,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                      color: isSelected ? AppTheme.primaryColor : AppTheme.textPrimary,
+                                    ),
                                   ),
                                 ),
-                                GestureDetector(
-                                  onTap: _deductPoints > 1
-                                      ? () => _setDeductPoints(_deductPoints - 1)
-                                      : null,
-                                  child: Icon(
-                                    Icons.keyboard_arrow_down,
-                                    size: 16,
-                                    color: _deductPoints > 1
-                                        ? AppTheme.primaryColor
-                                        : AppTheme.textHint,
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? AppTheme.primaryColor : Colors.grey.shade200,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    '扣 $points 分',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: isSelected ? Colors.white : AppTheme.textSecondary,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          onChanged: _onDeductInputChanged,
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text('每次最多扣 $maxDeduct 分', style: TextStyle(fontSize: 12, color: AppTheme.textHint)),
-                  const SizedBox(height: 16),
+                      );
+                    }),
+                  ],
 
-                  // 扣分原因
-                  TextFormField(
-                    controller: _reasonController,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: '扣分原因',
-                      hintText: '請輸入扣分原因',
-                      border: OutlineInputBorder(),
+                  // 備註
+                  if (_selectedItem != null) ...[
+                    const SizedBox(height: 16),
+                    const Text('備註（選填）', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _remarkController,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        hintText: '可填寫備註說明',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
           ),
           const SizedBox(height: 16),
 
-          // 剩餘安全分
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            decoration: BoxDecoration(
-              color: isZero ? AppTheme.errorColor.withOpacity(0.1) : AppTheme.successColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: isZero ? AppTheme.errorColor : AppTheme.successColor),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  '剩餘安全分',
-                  style: TextStyle(fontSize: 14, color: isZero ? AppTheme.errorColor : AppTheme.textSecondary),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$newScore / $siteSafetyTotal',
-                  style: TextStyle(
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                    color: isZero ? AppTheme.errorColor : AppTheme.successColor,
+          // 剩餘安全分預覽（選中項目後顯示）
+          if (_selectedItem != null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              decoration: BoxDecoration(
+                color: isZero ? AppTheme.errorColor.withOpacity(0.1) : AppTheme.successColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: isZero ? AppTheme.errorColor : AppTheme.successColor),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    '剩餘安全分',
+                    style: TextStyle(fontSize: 14, color: isZero ? AppTheme.errorColor : AppTheme.textSecondary),
                   ),
-                ),
-                if (isZero) ...[
-                  const SizedBox(height: 8),
-                  const Text(
-                    '扣分後安全分為 0，將自動鎖卡及加入黑名單',
-                    style: TextStyle(color: AppTheme.errorColor, fontSize: 13),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$newScore / $siteSafetyTotal',
+                    style: TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold,
+                      color: isZero ? AppTheme.errorColor : AppTheme.successColor,
+                    ),
                   ),
+                  if (isZero) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      '扣分後安全分為 0，將自動鎖卡及加入黑名單',
+                      style: TextStyle(color: AppTheme.errorColor, fontSize: 13),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
           const SizedBox(height: 24),
 
           // 確認按鈕
@@ -447,7 +470,7 @@ class _ScanDeductPageState extends State<ScanDeductPage> {
             width: double.infinity,
             height: 48,
             child: ElevatedButton(
-              onPressed: _loading || _deductPoints <= 0 ? null : _submitDeduct,
+              onPressed: _loading || _selectedItem == null ? null : _submitDeduct,
               style: ElevatedButton.styleFrom(
                 backgroundColor: isZero ? AppTheme.errorColor : AppTheme.primaryColor,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

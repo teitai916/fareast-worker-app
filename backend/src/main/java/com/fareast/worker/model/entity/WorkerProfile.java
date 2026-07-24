@@ -86,11 +86,8 @@ public class WorkerProfile {
     @Column(nullable = false)
     private Boolean cardLocked = false;
 
-    @Column
-    private Long currentSiteId;
-
-    @Column
-    private Long currentCompanyId;
+    @Column(name = "company_id")
+    private Long companyId;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

@@ -5,11 +5,13 @@ import com.fareast.worker.model.entity.Attendance;
 import com.fareast.worker.model.entity.SafetyVideo;
 import com.fareast.worker.model.entity.Site;
 import com.fareast.worker.model.entity.WorkerProfile;
+import com.fareast.worker.model.entity.WorkerSite;
 import com.fareast.worker.model.enums.CheckInType;
 import com.fareast.worker.repository.AttendanceRepository;
 import com.fareast.worker.repository.SafetyVideoRepository;
 import com.fareast.worker.repository.SiteRepository;
 import com.fareast.worker.repository.WorkerProfileRepository;
+import com.fareast.worker.repository.WorkerSiteRepository;
 import com.fareast.worker.repository.WorkerVideoViewRepository;
 import com.fareast.worker.service.AttendanceService;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +50,9 @@ public class AttendanceServiceImpl implements AttendanceService {
     private WorkerVideoViewRepository workerVideoViewRepository;
 
     @Autowired
+    private WorkerSiteRepository workerSiteRepository;
+
+    @Autowired
     private SiteRepository siteRepository;
 
     @Value("${checkin.max-distance:300}")
@@ -71,6 +76,22 @@ public class AttendanceServiceImpl implements AttendanceService {
         // Check if card is locked
         if (Boolean.TRUE.equals(profile.getCardLocked())) {
             throw new BusinessException(403, "工卡已被鎖定，請聯絡管理員");
+        }
+
+        // 多地盘支持：如果未指定siteId，取 worker_sites 中第一个地盘
+        if (siteId == null) {
+            List<WorkerSite> wsList = workerSiteRepository.findByWorkerId(profile.getId());
+            if (wsList.isEmpty()) {
+                throw new BusinessException(400, "請先加入一個地盤");
+            }
+            siteId = wsList.get(0).getSiteId();
+        } else {
+            // 验证工人是否已加入该地盘
+            java.util.Optional<WorkerSite> ws = workerSiteRepository
+                    .findByWorkerIdAndSiteId(profile.getId(), siteId);
+            if (ws.isEmpty()) {
+                throw new BusinessException(400, "您未加入此地盤，請先申請加入");
+            }
         }
 
         // Check face registration (已注释 - App Store 合规，改为拍照存档)

@@ -16,9 +16,11 @@ import com.fareast.worker.repository.SiteRepository;
 import com.fareast.worker.repository.UserRepository;
 import com.fareast.worker.repository.WorkerProfileRepository;
 import com.fareast.worker.repository.WorkerSiteSafetyScoreRepository;
+import com.fareast.worker.repository.WorkerSiteRepository;
 import com.fareast.worker.service.NotificationService;
 import com.fareast.worker.service.SafetyService;
 import com.fareast.worker.service.SiteService;
+import com.fareast.worker.model.entity.WorkerSite;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -52,6 +54,9 @@ public class SiteServiceImpl implements SiteService {
     private WorkerSiteSafetyScoreRepository workerSiteSafetyScoreRepository;
 
     @Autowired
+    private WorkerSiteRepository workerSiteRepository;
+
+    @Autowired
     private SafetyService safetyService;
 
     @Autowired
@@ -67,11 +72,12 @@ public class SiteServiceImpl implements SiteService {
         WorkerProfile profile = workerProfileRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException(404, "工人資料不存在"));
 
-        if (profile.getCurrentSiteId() == null) {
+        List<WorkerSite> wsList = workerSiteRepository.findByWorkerId(profile.getId());
+        if (wsList.isEmpty()) {
             throw new BusinessException(404, "目前未分配地盤");
         }
 
-        return siteRepository.findById(profile.getCurrentSiteId())
+        return siteRepository.findById(wsList.get(0).getSiteId())
                 .orElseThrow(() -> new BusinessException(404, "地盤信息不存在"));
     }
 
@@ -98,7 +104,7 @@ public class SiteServiceImpl implements SiteService {
                 .orElseThrow(() -> new BusinessException(404, "目標地盤不存在"));
 
         // 获取当前工人所属公司ID
-        Long targetCompanyId = profile.getCurrentCompanyId();
+        Long targetCompanyId = profile.getCompanyId();
         if (targetCompanyId == null) {
             throw new BusinessException(400, "工人未關聯公司，無法提交申請");
         }
@@ -110,9 +116,13 @@ public class SiteServiceImpl implements SiteService {
             throw new BusinessException(400, "已有待審批的轉地盤申請");
         }
 
+        // 取第一个 worker_sites 记录作为 fromSiteId
+        List<WorkerSite> wsList = workerSiteRepository.findByWorkerId(profile.getId());
+        Long fromSiteId = wsList.isEmpty() ? null : wsList.get(0).getSiteId();
+
         SiteChangeRequest request = SiteChangeRequest.builder()
                 .workerId(profile.getId())
-                .fromSiteId(profile.getCurrentSiteId())
+                .fromSiteId(fromSiteId)
                 .toSiteId(targetSiteId)
                 .companyId(targetCompanyId)
                 .reason(reason)
@@ -124,7 +134,7 @@ public class SiteServiceImpl implements SiteService {
 
         siteChangeRequestRepository.save(request);
         log.info("轉地盤申請已提交: workerId={}, fromSiteId={}, toSiteId={}",
-                profile.getId(), profile.getCurrentSiteId(), targetSiteId);
+                profile.getId(), fromSiteId, targetSiteId);
 
         // 發送通知給目標公司的所有判頭
         try {
@@ -169,33 +179,36 @@ public class SiteServiceImpl implements SiteService {
 
         if (approved) {
             request.setStatus(AuditStatus.APPROVED);
-            // 更新工人的当前工地
+            // 写入 worker_sites
             WorkerProfile profile = workerProfileRepository.findById(request.getWorkerId())
                     .orElseThrow(() -> new BusinessException(404, "工人資料不存在"));
-            Long oldSiteId = profile.getCurrentSiteId();
-            profile.setCurrentSiteId(request.getToSiteId());
+            java.util.Optional<WorkerSite> existingWs = workerSiteRepository
+                    .findByWorkerIdAndSiteId(profile.getId(), request.getToSiteId());
+            if (existingWs.isEmpty()) {
+                WorkerSite newWs = WorkerSite.builder()
+                        .workerId(profile.getId())
+                        .siteId(request.getToSiteId())
+                        .dailyWage(request.getDailyWage())
+                        .contractAttachment(request.getContractAttachment())
+                        .joinedAt(LocalDateTime.now())
+                        .build();
+                workerSiteRepository.save(newWs);
+            }
             if (request.getDailyWage() != null) {
                 profile.setDailyWage(request.getDailyWage());
             }
             if (request.getContractAttachment() != null) {
                 profile.setContractAttachment(request.getContractAttachment());
             }
-            workerProfileRepository.saveAndFlush(profile);  // 使用 saveAndFlush 确保立即写入数据库
-            log.info("更換地盤申請已批准: requestId={}, workerId={}, oldSiteId={}, newSiteId={}",
-                    request.getId(), request.getWorkerId(), oldSiteId, request.getToSiteId());
+            workerProfileRepository.save(profile);
+            log.info("更換地盤申請已批准: requestId={}, workerId={}, newSiteId={}",
+                    request.getId(), request.getWorkerId(), request.getToSiteId());
             
             // 初始化工人在新地盤的安全分（总分15分）
             _initWorkerSiteSafetyScore(request.getWorkerId(), request.getToSiteId());
             
             // 重置工人的必修安全影片完成狀態，需重新觀看
             safetyService.resetMandatoryVideos(profile.getUserId());
-            
-            // 验证是否更新成功
-            WorkerProfile verifyProfile = workerProfileRepository.findByUserId(request.getWorkerId()).orElse(null);
-            if (verifyProfile != null) {
-                log.info("驗證結果: workerId={}, currentSiteId={}", 
-                        request.getWorkerId(), verifyProfile.getCurrentSiteId());
-            }
         } else {
             request.setStatus(AuditStatus.REJECTED);
             log.info("更換地盤申請已拒絕: requestId={}, workerId={}",

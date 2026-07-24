@@ -27,6 +27,8 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
   List<dynamic> _companies = [];
   int? _selectedSiteId;
   int? _selectedCompanyId;
+  int? _currentCompanyId; // 工人当前公司（已加入地盘时自动填充）
+  String? _currentCompanyName;
   String? _error;
   String? _contractAttachmentName;
   Uint8List? _contractAttachmentBytes;
@@ -75,8 +77,35 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
       setState(() {
         _sites = homeData['availableSites'] as List? ?? [];
         _companies = results[1] as List;
+
+        // 获取当前公司信息（兼容新旧字段名）
+        final profile = homeData['profile'] as Map<String, dynamic>?;
+        if (profile != null) {
+          final companyId = (profile['companyId'] ?? profile['currentCompanyId']) as int?;
+          final companyName = (profile['companyName'] ?? profile['currentCompanyName']) as String?;
+          if (companyId != null && companyName != null && companyName.isNotEmpty) {
+            _currentCompanyId = companyId;
+            _currentCompanyName = companyName;
+          } else if (companyId != null) {
+            // 有 companyId 但无 companyName，从公司列表中查找
+            _currentCompanyId = companyId;
+            _currentCompanyName = null; // 稍后从 company 列表中匹配
+          }
+        }
+
         _sitesLoading = false;
         _companiesLoading = false;
+
+        // 如果有 companyId 但无 companyName，从公司列表中匹配
+        if (_currentCompanyId != null && _currentCompanyName == null) {
+          final matched = _companies.firstWhere(
+            (c) => c['id'] == _currentCompanyId,
+            orElse: () => null,
+          );
+          if (matched != null) {
+            _currentCompanyName = matched['name'] as String?;
+          }
+        }
 
         _safetyCardController.text = safetyCard;
         _safetyCardAttachmentUrl = safetyCardAtt.isNotEmpty ? safetyCardAtt : null;
@@ -165,7 +194,9 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
     }
 
     if (_selectedSiteId == null) { _showMsg('請選擇地盤'); return; }
-    if (_selectedCompanyId == null) { _showMsg('請選擇所屬判頭公司'); return; }
+    // companyId 从 profile 获取（自动填充当前公司）
+    final companyId = _selectedCompanyId ?? _currentCompanyId;
+    if (companyId == null) { _showMsg('請選擇所屬判頭公司'); return; }
     if (_dailyWageController.text.trim().isEmpty) { _showMsg('請填寫每日薪酬'); return; }
     final dailyWage = double.tryParse(_dailyWageController.text.trim());
     if (dailyWage == null || dailyWage <= 0) { _showMsg('請填寫有效的每日薪酬'); return; }
@@ -176,7 +207,7 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
       final contractAttachment = await _uploadAttachment();
       await _api.applySite(
         siteId: _selectedSiteId!,
-        companyId: _selectedCompanyId!,
+        companyId: companyId!,
         dailyWage: _dailyWageController.text.trim(),
         contractAttachment: contractAttachment,
         remark: _remarkController.text.trim(),
@@ -293,7 +324,28 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
 
         const Text('所屬判頭公司 *', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
-        _buildCompanySelector(),
+        if (_currentCompanyName != null)
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.business, size: 18, color: AppTheme.textSecondary),
+                const SizedBox(width: 10),
+                Text(_currentCompanyName!, style: const TextStyle(fontSize: 15)),
+                const Spacer(),
+                Icon(Icons.lock, size: 14, color: Colors.grey.shade400),
+                const SizedBox(width: 4),
+                Text('當前公司', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+              ],
+            ),
+          )
+        else
+          _buildCompanySelector(),
         const SizedBox(height: 20),
 
         const Text('每日薪酬（HKD）*', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -331,7 +383,7 @@ class _SiteApplyPageState extends State<SiteApplyPage> {
           width: double.infinity,
           height: 52,
           child: ElevatedButton(
-            onPressed: (_loading || _selectedSiteId == null || _selectedCompanyId == null) ? null : _submit,
+            onPressed: (_loading || _selectedSiteId == null || (_selectedCompanyId == null && _currentCompanyId == null)) ? null : _submit,
             style: ElevatedButton.styleFrom(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),

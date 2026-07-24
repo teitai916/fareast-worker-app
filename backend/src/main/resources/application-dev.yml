@@ -34,6 +34,15 @@ spring:
   flyway:
     enabled: false
 
+  # 开发环境文件上传路径
+  web:
+    resources:
+      static-locations: file:./uploads/
+
+# 文件上传目录（本地开发环境）
+file:
+  upload-dir: ./uploads
+
 # JWT 密钥（开发）
 jwt:
   secret: ${JWT_SECRET:JAVKcS00BUt1wjzV4PswrYvUagCuphEVgJilbX9fdNbIG2pY8CiVtjVmh3LOUITw2sPehR8ivb6zQYn8KHIyog==}
