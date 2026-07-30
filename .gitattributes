@@ -2,6 +2,8 @@
 *.pbxproj text eol=lf
 *.xcworkspacedata text eol=lf
 *.xcscheme text eol=lf
+*.xcconfig text eol=lf
+*.plist text eol=lf
 
 # 图片和二进制文件不转换行尾
 *.png binary
