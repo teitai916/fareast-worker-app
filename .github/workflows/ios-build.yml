@@ -68,6 +68,13 @@ jobs:
           bundler-cache: true
           working-directory: frontend
 
+      - name: Create temporary keychain
+        run: |
+          security create-keychain -p temp_keychain_pass fastlane_match
+          security default-keychain -s fastlane_match
+          security unlock-keychain -p temp_keychain_pass fastlane_match
+          security set-keychain-settings -lut 900 fastlane_match
+
       - name: Sync signing certificates (Fastlane Match)
         working-directory: frontend
         env:
