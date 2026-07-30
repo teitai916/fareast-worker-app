@@ -36,6 +36,11 @@ platform :ios do
     )
   end
 
+  desc "初始化 Match 证书仓库（仅首次运行，非只读模式）"
+  lane :init_match do
+    match(type: "appstore", readonly: false)
+  end
+
   desc "仅同步签名证书（调试用）"
   lane :sync_certs do
     match(type: "appstore", readonly: true)

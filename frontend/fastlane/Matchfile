@@ -10,7 +10,8 @@ storage_mode("git")
 
 type("appstore")            # 仅管理 App Store 分发证书
 app_identifier(["com.fareast.fareastWorkerApp"])
-username(ENV["APPLE_ID"])   # Apple Developer 账号邮箱（可选，match 自动检测）
+# username 可选，fastlane match 会自动使用 App Store Connect API Key 认证
+# username(ENV["APPLE_ID"])
 
 # 自动管理 keychain
 keychain_name("fastlane_match")

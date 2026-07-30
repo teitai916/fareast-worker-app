@@ -1,0 +1,67 @@
+# ====================================================
+# 一次性任务：初始化 Fastlane Match 证书仓库
+#
+# 使用方法：
+#   1. 确保已配置好 7 个 GitHub Secrets
+#   2. 在 GitHub Actions 页面手动触发
+#   3. 运行一次（约 3-5 分钟），证书自动存入 fareast-ios-certs 仓库
+#   4. 之后此 workflow 不再需要
+# ====================================================
+
+name: Init Fastlane Match (首次证书创建)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  init:
+    name: Create and upload signing certificates
+    runs-on: macos-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ===================== Ruby + Fastlane =====================
+      - name: Setup Ruby/Bundler
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
+          bundler-cache: true
+          working-directory: frontend
+
+      # ===================== 写入 App Store Connect API Key =====================
+      - name: Create App Store Connect API key file
+        env:
+          APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+        run: |
+          mkdir -p ~/private_keys
+          echo "$APPSTORE_PRIVATE_KEY" | base64 --decode > "~/private_keys/AuthKey_${APPSTORE_KEY_ID}.p8"
+
+      # ===================== 创建证书并上传到 Match 仓库 =====================
+      - name: Match — 生成 App Store 签名证书
+        working-directory: frontend
+        env:
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_KEY_FILEPATH: ~/private_keys/AuthKey_${{ secrets.APPSTORE_KEY_ID }}.p8
+          APP_STORE_CONNECT_API_KEY_IS_KEY_CONTENT_BASE64: false
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          MATCH_KEYCHAIN_NAME: "fastlane_match"
+          MATCH_KEYCHAIN_PASSWORD: "temp_keychain_pass"
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          bundle exec fastlane init_match
+
+      - name: 完成
+        run: |
+          echo ""
+          echo "===================================================="
+          echo " 证书创建成功！"
+          echo " 证书已存入: ${{ secrets.MATCH_GIT_URL }}"
+          echo " 现在可以使用 ios-build.yml 正常构建了"
+          echo "===================================================="
