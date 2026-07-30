@@ -84,7 +84,7 @@ jobs:
           MATCH_KEYCHAIN_NAME: "fastlane_match"
           MATCH_KEYCHAIN_PASSWORD: "temp_keychain_pass"
         run: |
-          fastlane match appstore --readonly
+          bundle exec fastlane match appstore --readonly
 
       # ===================== 签名并导出 IPA =====================
       - name: Archive and export IPA
@@ -94,7 +94,7 @@ jobs:
           MATCH_KEYCHAIN_NAME: "fastlane_match"
           MATCH_KEYCHAIN_PASSWORD: "temp_keychain_pass"
         run: |
-          fastlane build_and_export
+          bundle exec fastlane build_and_export
 
       # ===================== 上传到 App Store Connect / TestFlight =====================
       - name: Upload to TestFlight
@@ -105,7 +105,7 @@ jobs:
           APP_STORE_CONNECT_API_KEY_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
           APP_STORE_CONNECT_API_KEY_IS_KEY_CONTENT_BASE64: true
         run: |
-          fastlane upload_testflight
+          bundle exec fastlane upload_testflight
 
       # ===================== 通知 =====================
       - name: Upload IPA as artifact (备存)
