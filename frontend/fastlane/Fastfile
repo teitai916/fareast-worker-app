@@ -13,6 +13,7 @@ platform :ios do
       workspace: "ios/Runner.xcworkspace",
       configuration: "Release",
       clean: true,
+      xcargs: "DEVELOPMENT_TEAM=#{team_id}",
       export_method: "app-store",
       export_options: {
         method: "app-store",
