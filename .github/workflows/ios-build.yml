@@ -66,19 +66,7 @@ jobs:
         with:
           ruby-version: '3.1'
           bundler-cache: true
-
-      - name: Install Fastlane
-        working-directory: frontend
-        run: |
-          gem install fastlane -N --no-document
-
-      - name: Decode Match signing key
-        run: |
-          echo "${{ secrets.MATCH_PASSPHRASE }}" > /dev/null  # passphrase used by fastlane match
-          echo "${{ secrets.MATCH_GIT_PRIVATE_KEY }}" | base64 --decode > /tmp/match_ssh_key
-          chmod 600 /tmp/match_ssh_key
-          # 配置 SSH 以便 fastlane match 从私有仓库拉取证书
-          ssh-add /tmp/match_ssh_key 2>/dev/null || true
+          working-directory: frontend
 
       - name: Sync signing certificates (Fastlane Match)
         working-directory: frontend
