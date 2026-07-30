@@ -42,7 +42,11 @@ public class ContractorSafetyEvaluation {
     @Column(name = "period_quarter")
     private Integer periodQuarter;
 
-    // 21项评分
+    @Column(name = "template_code", length = 50)
+    @Builder.Default
+    private String templateCode = "SAFETY_2025";
+
+    // 22项评分
     @Column(name = "score_1") private Integer score1;
     @Column(name = "score_2") private Integer score2;
     @Column(name = "score_3") private Integer score3;

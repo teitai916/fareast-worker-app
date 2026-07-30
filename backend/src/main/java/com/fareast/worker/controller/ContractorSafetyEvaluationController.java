@@ -5,13 +5,20 @@ import com.fareast.worker.model.dto.ApiResponse;
 import com.fareast.worker.model.dto.CreateEvaluationRequest;
 import com.fareast.worker.model.dto.EvaluationResponse;
 import com.fareast.worker.model.entity.ContractorSafetyEvaluation;
+import com.fareast.worker.model.entity.EvaluationScoreItem;
+import com.fareast.worker.model.entity.EvaluationTemplate;
 import com.fareast.worker.model.entity.User;
 import com.fareast.worker.model.enums.UserRole;
+import com.fareast.worker.repository.EvaluationScoreItemRepository;
+import com.fareast.worker.repository.EvaluationTemplateRepository;
 import com.fareast.worker.repository.UserRepository;
 import com.fareast.worker.service.ContractorSafetyEvaluationService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
+
+import java.util.*;
+import java.util.stream.Collectors;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,6 +35,12 @@ public class ContractorSafetyEvaluationController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private EvaluationTemplateRepository templateRepo;
+
+    @Autowired
+    private EvaluationScoreItemRepository itemRepo;
 
     // ==================== 安全人员操作 ====================
 
@@ -153,5 +166,50 @@ public class ContractorSafetyEvaluationController {
     public ApiResponse<List<EvaluationResponse>> getNonCompliantList(
             @AuthenticationPrincipal String userId) {
         return ApiResponse.success(evaluationService.getNonCompliantList(Long.valueOf(userId)));
+    }
+
+    /** 获取评分模板明细 */
+    @GetMapping("/templates/{code}/items")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<Map<String, Object>> getTemplateItems(@PathVariable String code) {
+        EvaluationTemplate template = templateRepo.findByCode(code)
+                .orElseThrow(() -> new RuntimeException("模板不存在: " + code));
+
+        List<EvaluationScoreItem> items = itemRepo.findByTemplateIdOrderByScoreIndexAsc(template.getId());
+        int itemCount = items.size();
+        int maxScore = itemCount * template.getMaxScorePerItem();
+
+        List<Map<String, Object>> itemList = items.stream().map(item -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("scoreIndex", item.getScoreIndex());
+            m.put("category", item.getCategory());
+            m.put("nameZh", item.getNameZh());
+            m.put("sortOrder", item.getSortOrder());
+
+            List<Map<String, String>> guides = new ArrayList<>();
+            addGuide(guides, item.getGuideTier1(), item.getGuideTier1Range());
+            addGuide(guides, item.getGuideTier2(), item.getGuideTier2Range());
+            addGuide(guides, item.getGuideTier3(), item.getGuideTier3Range());
+            addGuide(guides, item.getGuideTier4(), item.getGuideTier4Range());
+            m.put("guides", guides);
+            return m;
+        }).collect(Collectors.toList());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("template", Map.of(
+                "code", template.getCode(),
+                "name", template.getName(),
+                "maxScorePerItem", template.getMaxScorePerItem(),
+                "itemCount", itemCount,
+                "maxScore", maxScore
+        ));
+        result.put("items", itemList);
+        return ApiResponse.success(result);
+    }
+
+    private void addGuide(List<Map<String, String>> guides, String desc, String range) {
+        if (desc != null && !desc.isBlank()) {
+            guides.add(Map.of("desc", desc, "range", range != null ? range : ""));
+        }
     }
 }

@@ -81,9 +81,6 @@ public class AuthController {
         if (newPassword == null || newPassword.trim().isEmpty()) {
             return ApiResponse.error(400, "新密碼不能為空");
         }
-        if (newPassword.length() < 6) {
-            return ApiResponse.error(400, "密碼長度至少為6位");
-        }
         authService.changePassword(Long.valueOf(userId), newPassword.trim());
         return ApiResponse.success(null);
     }

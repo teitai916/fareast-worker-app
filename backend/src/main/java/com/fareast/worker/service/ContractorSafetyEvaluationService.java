@@ -274,7 +274,7 @@ public class ContractorSafetyEvaluationService {
         Company company = companyRepository.findById(e.getCompanyId()).orElse(null);
         String siteName = site != null ? site.getName() : "未知地盤";
         String companyName = company != null ? company.getName() : "未知公司";
-        String scoreInfo = "總分：" + e.getTotalScore() + "/210，百分比：" + e.getPercentage() + "%";
+        String scoreInfo = "總分：" + e.getTotalScore() + "/220，百分比：" + e.getPercentage() + "%";
 
         // 知会被评分分判商的所有用户
         List<User> companyUsers = userRepository.findByCompanyIdAndRole(e.getCompanyId(), UserRole.CONTRACTOR);

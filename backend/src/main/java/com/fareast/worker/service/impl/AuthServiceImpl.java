@@ -14,6 +14,7 @@ import com.fareast.worker.repository.WorkerProfileRepository;
 import com.fareast.worker.security.JwtTokenProvider;
 import com.fareast.worker.service.AuthService;
 import com.fareast.worker.service.SmsService;
+import com.fareast.worker.util.PasswordValidator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -54,6 +55,9 @@ public class AuthServiceImpl implements AuthService {
     private SmsService smsService;
 
     @Autowired
+    private PasswordValidator passwordValidator;
+
+    @Autowired
     private AuthenticationManager authenticationManager;
 
     @Autowired
@@ -75,6 +79,9 @@ public class AuthServiceImpl implements AuthService {
         if (userRepository.existsByPhone(request.getPhone())) {
             throw new BusinessException(400, "該手機號碼已被註冊");
         }
+
+        // 密碼複雜度校驗（6位數字弱密碼攔截）
+        passwordValidator.validate(request.getPassword(), request.getPhone(), request.getBirthDate());
 
         // Create user
         User.UserBuilder userBuilder = User.builder()
@@ -217,6 +224,12 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findByPhone(request.getPhone())
                 .orElseThrow(() -> new BusinessException(400, "手機號碼未註冊"));
 
+        // 密碼複雜度校驗（birthDate 從 WorkerProfile 取，可能為 null）
+        String resetBirthDate = workerProfileRepository.findByUserId(user.getId())
+                .map(p -> p.getBirthDate() == null ? null : p.getBirthDate().toString())
+                .orElse(null);
+        passwordValidator.validate(request.getNewPassword(), request.getPhone(), resetBirthDate);
+
         // Update password
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
@@ -226,11 +239,9 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void changePassword(Long userId, String newPassword) {
-        if (newPassword == null || newPassword.length() < 6) {
-            throw new BusinessException(400, "密碼長度至少為6位");
-        }
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(404, "用戶不存在"));
+
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
         log.info("密碼修改成功: userId={}", userId);
