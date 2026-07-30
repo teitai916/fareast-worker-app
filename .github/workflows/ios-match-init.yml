@@ -41,6 +41,35 @@ jobs:
           echo "$APPSTORE_PRIVATE_KEY" | base64 --decode > ~/private_keys/AuthKey_${APPSTORE_KEY_ID}.p8
 
       # ===================== 创建证书并上传到 Match 仓库 =====================
+      - name: 诊断 — 验证 API Key 和 Secret 配置
+        env:
+          APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+        run: |
+          echo "=== 检查 API Key 文件 ==="
+          KEY_FILE=~/private_keys/AuthKey_${APPSTORE_KEY_ID}.p8
+          if [ -f "$KEY_FILE" ]; then
+            echo "✅ 文件存在: $KEY_FILE"
+            echo "文件大小: $(wc -c < "$KEY_FILE") bytes"
+            echo "文件前 3 行:"
+            head -3 "$KEY_FILE"
+          else
+            echo "❌ 文件不存在!"
+          fi
+          echo ""
+          echo "=== 检查 Environment Variables ==="
+          echo "ISSUER_ID  长度: ${#APPSTORE_ISSUER_ID}"
+          echo "KEY_ID     长度: ${#APPSTORE_KEY_ID}"
+          echo "TEAM_ID    长度: ${#APPLE_TEAM_ID}"
+          echo "PRIVATE_KEY 长度: ${#APPSTORE_PRIVATE_KEY}"
+          echo "MATCH_GIT_URL: $MATCH_GIT_URL"
+          echo ""
+          echo "=== 检查 ISSUER_ID 格式 ==="
+          echo "$APPSTORE_ISSUER_ID" | head -c 50
+
       - name: Match — 生成 App Store 签名证书
         working-directory: frontend
         env:
