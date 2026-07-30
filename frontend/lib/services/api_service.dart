@@ -938,6 +938,17 @@ class ApiService {
     return (jsonDecode(resp.body)['data'] as List).cast<Map<String, dynamic>>();
   }
 
+  /// 獲取評分模板明細
+  Future<Map<String, dynamic>> getEvaluationTemplateItems(String templateCode) async {
+    if (ApiConfig.mockMode) return {};
+    final resp = await _client.get(
+      Uri.parse('$baseUrl/safety/evaluations/templates/$templateCode/items'),
+      headers: ApiConfig.headers(token: token),
+    );
+    _handleError(resp);
+    return (jsonDecode(resp.body)['data'] as Map<String, dynamic>).cast<String, dynamic>();
+  }
+
   /// 搜索工人
   Future<List<Map<String, dynamic>>> searchInternalWorkers({
     String? name,

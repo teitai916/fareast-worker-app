@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
 import 'package:fareast_worker_app/widgets/app_widgets.dart';
+import 'package:fareast_worker_app/utils/password_validator.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -46,6 +47,14 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
   Future<void> _reset() async {
     if (!_formKey.currentState!.validate()) return;
+    final pwd = _passwordController.text;
+    final pwdErr = validatePasswordComplexity(pwd, phone: _phoneController.text.trim());
+    if (pwdErr != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(pwdErr), backgroundColor: AppTheme.errorColor),
+      );
+      return;
+    }
     setState(() => _loading = true);
     try {
       await _api.resetPassword(

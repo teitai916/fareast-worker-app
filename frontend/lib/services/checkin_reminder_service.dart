@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';   // 提供 kIsWeb，用于跳过 Web 不支持的本地通知
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -23,6 +23,11 @@ class CheckinReminderService {
 
   /// 初始化通知插件（app 启动时调用一次）
   static Future<void> init() async {
+    // Web 平台不支持本地通知，直接跳过，避免 main() 启动崩溃
+    if (kIsWeb) {
+      debugPrint('[CheckinReminder] Web 平台不支持本地通知，跳过初始化');
+      return;
+    }
     // 初始化时区数据
     tz.initializeTimeZones();
 
@@ -52,6 +57,7 @@ class CheckinReminderService {
 
   /// 调度所有提醒（工人登录后调用）
   static Future<void> schedule() async {
+    if (kIsWeb) return; // Web 不支持本地通知，跳过调度
     // 避免重复调度
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_prefKeyScheduled) == true) return;
@@ -99,6 +105,7 @@ class CheckinReminderService {
 
   /// 取消所有提醒
   static Future<void> cancel() async {
+    if (kIsWeb) return; // Web 不支持本地通知，跳过
     for (int i = 0; i < 12; i++) {
       await _plugin.cancel(_idBase + i);
     }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
 import 'package:fareast_worker_app/widgets/app_widgets.dart';
+import 'package:fareast_worker_app/utils/password_validator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -201,6 +202,13 @@ class _RegisterPageState extends State<RegisterPage> {
     }
     if (pwd.isEmpty || pwd.length < 6) {
       _showMsg('密碼長度不少於6位'); return;
+    }
+    final birthDateStr = _birthDate != null
+        ? '${_birthDate!.year}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}'
+        : null;
+    final pwdErr = validatePasswordComplexity(pwd, phone: phone, birthDate: birthDateStr);
+    if (pwdErr != null) {
+      _showMsg(pwdErr); return;
     }
     if (pwd != confirm) {
       _showMsg('兩次輸入的密碼不一致'); return;

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:fareast_worker_app/config/theme.dart';
+import 'package:fareast_worker_app/utils/password_validator.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
 import 'package:fareast_worker_app/services/biometric_service.dart';
 import 'package:fareast_worker_app/pages/notifications_page.dart';
@@ -1173,6 +1174,19 @@ class _ContractorHomePageState extends State<ContractorHomePage>
                 );
                 return;
               }
+
+              // 密碼複雜度校驗（含手機號/出生日期關聯，在彈窗內攔截，不關閉彈窗）
+              final phone = TokenManager.currentUser?.phone;
+              final pwdErr = validatePasswordComplexity(pw, phone: phone, birthDate: null);
+              if (pwdErr != null) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(content: Text(pwdErr), backgroundColor: AppTheme.errorColor),
+                );
+                pwCtrl.clear();       // 清空新密碼
+                confirmCtrl.clear();  // 清空確認密碼
+                return;               // 保持彈窗不關閉，讓用戶重輸
+              }
+
               Navigator.pop(ctx, true);
             },
             child: const Text('確認'),
@@ -1181,8 +1195,11 @@ class _ContractorHomePageState extends State<ContractorHomePage>
       ),
     );
     final newPw = pwCtrl.text.trim();
-    pwCtrl.dispose();
-    confirmCtrl.dispose();
+    // 推迟 dispose，避免弹窗控件未完全卸载时 _dependents.isEmpty 断言
+    Future.microtask(() {
+      pwCtrl.dispose();
+      confirmCtrl.dispose();
+    });
     if (result == true) {
       try {
         await _api.changePassword(newPw);

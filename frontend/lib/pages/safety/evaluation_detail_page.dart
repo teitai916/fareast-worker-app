@@ -34,6 +34,7 @@ class _EvaluationDetailPageState extends State<EvaluationDetailPage> {
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
+      await SafetyScoreConfig.init('SAFETY_2025', api: _api);
       final data = await _api.getEvaluationDetail(widget.evaluationId);
       setState(() {
         _evaluation = ContractorSafetyEvaluation.fromJson(data);
@@ -333,7 +334,7 @@ class _EvaluationDetailPageState extends State<EvaluationDetailPage> {
 
   /// 按类别分组显示评分明细
   List<Widget> _buildScoreDetails(Map<String, int?> scores) {
-    const categories = SafetyScoreConfig.categories;
+    final categories = SafetyScoreConfig.categories;
 
     final List<Widget> widgets = [];
     for (final entry in categories.entries) {
@@ -343,7 +344,7 @@ class _EvaluationDetailPageState extends State<EvaluationDetailPage> {
       ));
       for (final index in entry.value) {
         final key = SafetyScoreConfig.name(index);
-        final value = scores[key];
+        final value = scores[index.toString()] ?? scores[key];  // 新格式(序号)優先，舊格式兜底
         widgets.add(Padding(
           padding: const EdgeInsets.symmetric(vertical: 3),
           child: Row(

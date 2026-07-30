@@ -12,8 +12,9 @@ class ContractorSafetyEvaluation {
   final int? periodYear;
   final int? periodQuarter;
 
-  /// 21项评分 (key: 评分项名称, value: 评分 0-10)
+  /// 评分项 (key: 序号 "1"~"22" 或旧版中文名)
   final Map<String, int?> scores;
+  final String? templateCode;
 
   final int? totalScore;
   final double? percentage;
@@ -48,6 +49,7 @@ class ContractorSafetyEvaluation {
     this.periodYear,
     this.periodQuarter,
     required this.scores,
+    this.templateCode,
     this.totalScore,
     this.percentage,
     this.nonCompliantLevel,
@@ -87,6 +89,7 @@ class ContractorSafetyEvaluation {
       periodYear: json['periodYear'] as int?,
       periodQuarter: json['periodQuarter'] as int?,
       scores: scores,
+      templateCode: json['templateCode'] as String?,
       totalScore: json['totalScore'] as int?,
       percentage: (json['percentage'] as num?)?.toDouble(),
       nonCompliantLevel: json['nonCompliantLevel'] as String?,
@@ -116,7 +119,7 @@ class ContractorSafetyEvaluation {
       'period': period,
       'periodYear': periodYear,
       'periodQuarter': periodQuarter,
-      ...{for (final i in SafetyScoreConfig.names.keys) 'score$i': scores[SafetyScoreConfig.name(i)]},
+      ...{for (final it in SafetyScoreConfig.items) 'score${it.scoreIndex}': scores[it.scoreIndex.toString()] ?? scores[it.nameZh]},
       'evidenceAttachments': evidenceAttachments,
       'remarks': remarks,
     };

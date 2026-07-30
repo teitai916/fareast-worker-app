@@ -28,7 +28,7 @@ class _EvaluationFormPageState extends State<EvaluationFormPage> {
   String _remarks = '';
 
   /// 序号 → 分值
-  final Map<int, int?> _scores = {for (final i in SafetyScoreConfig.names.keys) i: null};
+  final Map<int, int?> _scores = {};
   bool _isEditing = false;
 
   List<Map<String, dynamic>> _sites = [];
@@ -39,6 +39,10 @@ class _EvaluationFormPageState extends State<EvaluationFormPage> {
   void initState() {
     super.initState();
     _isEditing = widget.evaluationId != null;
+    // 從已加載的模板初始化分數表
+    for (final it in SafetyScoreConfig.items) {
+      _scores[it.scoreIndex] = null;
+    }
     if (widget.existing != null) {
       final e = widget.existing!;
       _siteId = e.siteId;
@@ -47,8 +51,9 @@ class _EvaluationFormPageState extends State<EvaluationFormPage> {
       _periodYear = e.periodYear ?? DateTime.now().year;
       _periodQuarter = e.periodQuarter ?? ((DateTime.now().month - 1) ~/ 3) + 1;
       _remarks = e.remarks ?? '';
-      for (final i in SafetyScoreConfig.names.keys) {
-        _scores[i] = e.scores[SafetyScoreConfig.name(i)];
+      for (final it in SafetyScoreConfig.items) {
+        final i = it.scoreIndex;
+        _scores[i] = e.scores[i.toString()] ?? e.scores[SafetyScoreConfig.name(i)];
       }
     }
     _loadOptions();
@@ -56,12 +61,27 @@ class _EvaluationFormPageState extends State<EvaluationFormPage> {
 
   Future<void> _loadOptions() async {
     try {
-      final sites = await _api.getInternalSites();
-      final companies = await _api.getInternalCompanies();
-      if (mounted) setState(() { _sites = sites; _companies = companies; _loadingOptions = false; });
+      final results = await Future.wait([
+        _api.getInternalSites(),
+        _api.getInternalCompanies(),
+      ], eagerError: false);
+      if (mounted) setState(() {
+        _sites = List<Map<String, dynamic>>.from(results[0] as List);
+        _companies = List<Map<String, dynamic>>.from(results[1] as List);
+        _loadingOptions = false;
+      });
     } catch (e) {
       if (mounted) setState(() => _loadingOptions = false);
     }
+
+    // 模板元數據後臺加載，不阻塞下拉
+    SafetyScoreConfig.init('SAFETY_2025', api: _api).then((_) {
+      if (mounted) setState(() {});
+    }).catchError((e) {
+      debugPrint('SafetyScoreConfig.init failed: $e');
+      if (mounted) setState(() {});
+      return Future.value();
+    });
   }
 
   Future<void> _save() async {
@@ -226,16 +246,22 @@ class _EvaluationFormPageState extends State<EvaluationFormPage> {
 
   List<Widget> _buildScoreFields() {
     final widgets = <Widget>[];
+    if (SafetyScoreConfig.items.isEmpty) {
+      widgets.add(const Center(child: Padding(
+        padding: EdgeInsets.all(24),
+        child: CircularProgressIndicator(),
+      )));
+      return widgets;
+    }
     String? lastCategory;
-    for (final i in SafetyScoreConfig.names.keys) {
-      final cat = SafetyScoreConfig.category(i);
+    for (final it in SafetyScoreConfig.items) {
+      final cat = it.category;
       if (cat != lastCategory) {
         lastCategory = cat;
         widgets.add(_sectionTitle(cat));
         widgets.add(const SizedBox(height: 8));
       }
-      final name = SafetyScoreConfig.name(i);
-      widgets.add(_scoreField(i, name));
+      widgets.add(_scoreField(it.scoreIndex, it.nameZh));
       widgets.add(const SizedBox(height: 4));
     }
     return widgets;
