@@ -3,9 +3,16 @@ default_platform(:ios)
 platform :ios do
   desc "构建并导出 IPA"
   lane :build_and_export do
-    # 参数配置（可从环境变量覆盖）
+    # 参数配置（可��环境变量覆盖）
     team_id = ENV["APPLE_TEAM_ID"]
     bundle_id = "com.fareast.fareastWorkerApp"
+
+    # 为重新生成的 xcodeproj 配置自动签名
+    automatic_code_signing(
+      path: "ios/Runner.xcodeproj",
+      use_automatic_signing: true,
+      team_id: team_id
+    )
 
     # 使用 gym 构建 .xcarchive 并导出 IPA
     gym(
