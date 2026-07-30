@@ -49,6 +49,14 @@ jobs:
         working-directory: frontend
         run: flutter pub get
 
+      - name: Regenerate iOS project files
+        working-directory: frontend
+        run: |
+          rm -rf ios/Runner.xcodeproj
+          rm -rf ios/Runner.xcworkspace
+          rm -rf ios/Podfile ios/Podfile.lock ios/Pods
+          flutter pub get
+
       - name: Build iOS release (prepare .app)
         working-directory: frontend
         run: flutter build ios --release --no-codesign
