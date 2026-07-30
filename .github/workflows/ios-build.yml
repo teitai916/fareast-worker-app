@@ -44,13 +44,6 @@ jobs:
       - name: Verify Flutter version
         run: flutter --version
 
-      # ===================== 安装 CocoaPods 依赖 =====================
-      - name: Install CocoaPods dependencies
-        working-directory: frontend/ios
-        run: |
-          pod repo update --silent
-          pod install --repo-update
-
       # ===================== Flutter 构建 =====================
       - name: Get Flutter packages
         working-directory: frontend
