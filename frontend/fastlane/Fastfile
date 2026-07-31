@@ -4,18 +4,41 @@ platform :ios do
   desc "构建并导出 IPA"
   lane :build_and_export do
     team_id = ENV["APPLE_TEAM_ID"]
+    app_id = "com.fareast.fareastWorkerApp"
+
+    # 同步（只读）Match 证书与 App Store 配置文件到本机钥匙串
+    match(
+      type: "appstore",
+      readonly: true,
+      app_identifier: [app_id],
+      keychain_name: ENV["MATCH_KEYCHAIN_NAME"],
+      keychain_password: ENV["MATCH_KEYCHAIN_PASSWORD"]
+    )
+
+    # 取 Match 安装的 App Store provisioning profile 名称（作为签名 specifier）
+    profile_env = "sigh_#{app_id.gsub('.', '_')}_appstore_profile-name"
+    profile_name = ENV[profile_env]
+    UI.user_error!("未找到 Match 安装的 App Store provisioning profile，请确认 init_match 已成功运行") unless profile_name
 
     gym(
       scheme: "Runner",
       workspace: "ios/Runner.xcworkspace",
       configuration: "Release",
       clean: true,
-      xcargs: "DEVELOPMENT_TEAM=#{team_id} CODE_SIGN_STYLE=Automatic",
       export_method: "app-store",
+      # 手动签名：直接指定 Match 已安装的 App Store 配置文件，不依赖 Xcode 自动向 Apple 拉取
+      signing_style: "manual",
+      codesigning_identity: "Apple Distribution",
+      provisioning_profile: {
+        app_id => profile_name
+      },
       export_options: {
         method: "app-store",
         teamID: team_id,
-        signingStyle: "automatic",
+        signingStyle: "manual",
+        provisioningProfiles: {
+          app_id => profile_name
+        },
         uploadBitcode: false,
         uploadSymbols: true
       },
@@ -29,8 +52,7 @@ platform :ios do
     pilot(
       ipa: "build/ios/ipa/fareast_worker_app.ipa",
       skip_waiting_for_build_processing: true,
-      distribute_only: true,
-      notify_external_testers: true
+      notify_external_testers: false
     )
   end
 
