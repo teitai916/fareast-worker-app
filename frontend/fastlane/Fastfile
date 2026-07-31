@@ -14,6 +14,10 @@ platform :ios do
       team_id: team_id
     )
 
+    # 同步 Development + AppStore 两种类型的签名证书
+    match(type: "development", readonly: true)
+    match(type: "appstore", readonly: true)
+
     # 使用 gym 构建 .xcarchive 并导出 IPA
     gym(
       scheme: "Runner",
@@ -51,6 +55,7 @@ platform :ios do
       issuer_id: ENV["APP_STORE_CONNECT_API_KEY_ISSUER_ID"],
       key_filepath: ENV["APP_STORE_CONNECT_API_KEY_KEY_FILEPATH"]
     )
+    match(type: "development", readonly: false, api_key: api_key)
     match(type: "appstore", readonly: false, api_key: api_key)
   end
 
