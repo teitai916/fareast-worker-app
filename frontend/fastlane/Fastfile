@@ -8,7 +8,7 @@ platform :ios do
     bundle_id = "com.fareast.fareastWorkerApp"
 
     # 为重新生成的 xcodeproj 配置自动签名
-    automatic_code_signing(
+    update_code_signing_settings(
       path: "ios/Runner.xcodeproj",
       use_automatic_signing: true,
       team_id: team_id
