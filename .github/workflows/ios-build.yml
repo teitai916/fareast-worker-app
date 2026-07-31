@@ -91,7 +91,10 @@ jobs:
       - name: Archive and export IPA
         working-directory: frontend
         env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
           MATCH_KEYCHAIN_NAME: "fastlane_match"
           MATCH_KEYCHAIN_PASSWORD: "temp_keychain_pass"
         run: |
