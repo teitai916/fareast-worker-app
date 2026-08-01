@@ -6,7 +6,6 @@ import 'package:fareast_worker_app/config/theme.dart';
 import 'package:fareast_worker_app/utils/password_validator.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
 import 'package:fareast_worker_app/services/biometric_service.dart';
-import 'package:fareast_worker_app/services/checkin_reminder_service.dart';
 import 'package:fareast_worker_app/pages/worker/change_site_page.dart';
 import 'package:fareast_worker_app/pages/worker/change_company_page.dart';
 import 'package:fareast_worker_app/pages/worker/attendance_page.dart';
@@ -136,8 +135,6 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
       });
       // 读取生物识别开关状态
       _refreshBiometricState();
-      // 调度打卡提醒（首次加载时自动调度，避免重复）
-      CheckinReminderService.schedule();
     } catch (e) {
       if (!mounted) return;
       setState(() { _loading = false; _error = e.toString(); });

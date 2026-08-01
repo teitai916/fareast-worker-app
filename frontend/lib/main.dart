@@ -2,13 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fareast_worker_app/app.dart';
 import 'package:fareast_worker_app/services/api_service.dart';
-import 'package:fareast_worker_app/services/checkin_reminder_service.dart';
 import 'package:fareast_worker_app/services/shortcut_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // 初始化打卡提醒通知服务
-  await CheckinReminderService.init();
   // 锁定竖屏
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
