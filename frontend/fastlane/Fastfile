@@ -16,8 +16,8 @@ platform :ios do
     )
 
     # 取 Match 安装的 App Store provisioning profile 名称（作为签名 specifier）
-    profile_env = "sigh_#{app_id.gsub('.', '_')}_appstore_profile-name"
-    profile_name = ENV[profile_env]
+    mapping_str = ENV["MATCH_PROVISIONING_PROFILE_MAPPING"]
+    profile_name = mapping_str[/"#{app_id}"=>"([^"]+)"/, 1]
     UI.user_error!("未找到 Match 安装的 App Store provisioning profile，请确认 init_match 已成功运行") unless profile_name
 
     gym(
