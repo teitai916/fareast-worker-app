@@ -18,6 +18,10 @@ platform :ios do
     profile_name = profiles[app_id]
     UI.user_error!("未找到 Match 安装的 App Store provisioning profile") unless profile_name
 
+    # 取 profile UUID（无空格，xcargs 安全）—— match 内部调 sigh 后自动写入
+    profile_uuid = lane_context[SharedValues::SIGH_UUID]
+    UI.user_error!("未获取到 provisioning profile UUID") unless profile_uuid
+
     gym(
       scheme: "Runner",
       workspace: "ios/Runner.xcworkspace",
@@ -25,9 +29,8 @@ platform :ios do
       clean: true,
       export_method: "app-store",
       codesigning_identity: "Apple Distribution",
-      # 只设 DEVELOPMENT_TEAM + CODE_SIGN_STYLE=Manual（不设 PROVISIONING_PROFILE_SPECIFIER，
-      # 避免 profile 名称中的空格被 gym xcargs 按空格拆分，xcodebuild 凭 identity 自动匹配）
-      xcargs: "DEVELOPMENT_TEAM=#{team_id} CODE_SIGN_STYLE=Manual",
+      # 用 UUID 做 PROVISIONING_PROFILE_SPECIFIER（无空格，gym xcargs 不拆分）
+      xcargs: "DEVELOPMENT_TEAM=#{team_id} CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER=#{profile_uuid}",
       export_options: {
         method: "app-store",
         teamID: team_id,
