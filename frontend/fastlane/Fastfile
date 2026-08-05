@@ -15,9 +15,8 @@ platform :ios do
       keychain_password: ENV["MATCH_KEYCHAIN_PASSWORD"]
     )
 
-    # Match 返回 UUID（无空格，不会在 xcargs 里被拆分）
-    profile_uuid = profiles[app_id]
-    UI.user_error!("未找到 Match 安装的 App Store provisioning profile，请确认 init_match 已成功运行") unless profile_uuid
+    profile_name = profiles[app_id]
+    UI.user_error!("未找到 Match 安装的 App Store provisioning profile") unless profile_name
 
     gym(
       scheme: "Runner",
@@ -26,14 +25,15 @@ platform :ios do
       clean: true,
       export_method: "app-store",
       codesigning_identity: "Apple Distribution",
-      # 通过 xcargs 强制手动签名，UUID 无空格避免 xcodebuild 参数解析错误
-      xcargs: "DEVELOPMENT_TEAM=#{team_id} CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER=#{profile_uuid}",
+      # 只设 DEVELOPMENT_TEAM + CODE_SIGN_STYLE=Manual（不设 PROVISIONING_PROFILE_SPECIFIER，
+      # 避免 profile 名称中的空格被 gym xcargs 按空格拆分，xcodebuild 凭 identity 自动匹配）
+      xcargs: "DEVELOPMENT_TEAM=#{team_id} CODE_SIGN_STYLE=Manual",
       export_options: {
         method: "app-store",
         teamID: team_id,
         signingStyle: "manual",
         provisioningProfiles: {
-          app_id => profile_uuid
+          app_id => profile_name
         },
         uploadBitcode: false,
         uploadSymbols: true
