@@ -18,8 +18,8 @@ platform :ios do
     profile_name = profiles[app_id]
     UI.user_error!("未找到 Match 安装的 App Store provisioning profile") unless profile_name
 
-    # 取 profile UUID（无空格，xcargs 安全）—— match 内部调 sigh 后自动写入
-    profile_uuid = lane_context[SharedValues::SIGH_UUID]
+    # 取 profile UUID（无空格，xcargs 安全）—— match 输出的 sigh_*_appstore env
+    profile_uuid = ENV["sigh_#{app_id.gsub('.', '_')}_appstore"]
     UI.user_error!("未获取到 provisioning profile UUID") unless profile_uuid
 
     gym(
