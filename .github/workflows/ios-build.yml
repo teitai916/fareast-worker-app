@@ -44,6 +44,10 @@ jobs:
       - name: Verify Flutter version
         run: flutter --version
 
+      # ===================== 固定 Xcode 版本 =====================
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
       # ===================== Flutter 构建 =====================
       - name: Get Flutter packages
         working-directory: frontend
